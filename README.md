@@ -3,9 +3,9 @@
 A Python Extension for InterSystems **Cache/IRIS** and **YottaDB**.
 
 Chris Munt <cmunt@mgateway.com>  
-4 December 2019, M/Gateway Developments Ltd [http://www.mgateway.com](http://www.mgateway.com)
+12 December 2019, M/Gateway Developments Ltd [http://www.mgateway.com](http://www.mgateway.com)
 
-* Current Release: Version: 3.0; Revision 1 (4 December 2019)
+* Current Release: Version: 2.1; Revision 44 - Beta (12 December 2019)
 
 ## Overview
 
