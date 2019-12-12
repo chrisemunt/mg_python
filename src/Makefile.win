@@ -1,0 +1,62 @@
+# Microsoft Windows makefile for mg_python module (mg_python.pyd)
+# 
+# This makefile must be involked from the Visual Studio "x64 Native Tools Command Prompt for VS"
+#
+# Inputs:
+#    PYTHONDIR (Example: c:\python38)
+#    PYTHONLIB (Example: python38)
+# With the above examples, the build process will expect to find:
+#    python.h in c:\python38\include
+#    python38.lib in c:\python38\libs
+#    module installation directory: c:\python38\DLLs
+#
+# Commands:
+#    Build mg_python module   : nmake /f makefile.win PYTHONDIR=C:\python38 PYTHONLIB=python38
+#    Install mg_python module : nmake /f makefile.win PYTHONDIR=C:\python38 PYTHONLIB=python38 install
+#    Clean mg_python build    : nmake /f makefile.win clean
+#
+
+!IF "$(PYTHONDIR)" == ""
+PYTHONDIR=c:\python38
+!ENDIF
+
+!IF "$(PYTHONLIB)" == ""
+PYTHONLIB=python38
+!ENDIF
+
+!MESSAGE Python Root Directory          : $(PYTHONDIR)
+!MESSAGE Python Include file (python.h) : $(PYTHONDIR)\include
+!MESSAGE Python Library file            : $(PYTHONDIR)\libs\$(PYTHONLIB).lib
+!MESSAGE
+
+# Microsoft C Compiler
+CC=cl.exe
+
+# Microsoft linker
+LINK=link.exe
+
+# Build mg_python module
+all : app
+
+# Link the object file and dependent libraries into a binary
+app : mg_python.obj
+   $(LINK) /OUT:mg_python.pyd mg_python.obj /MANIFEST /NXCOMPAT /PDB:"mg_python.pdb" /DYNAMICBASE \
+           "Ws2_32.lib" "$(PYTHONLIB).lib" "kernel32.lib" "user32.lib" \
+           /IMPLIB:"mg_python.lib" /DLL /MACHINE:X64 /INCREMENTAL:NO /SUBSYSTEM:WINDOWS \
+           /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /ERRORREPORT:PROMPT /NOLOGO \
+           /LIBPATH:"$(PYTHONDIR)\libs" /TLBID:1
+
+# Compile the source file into object file
+mg_python.obj : mg_python.c
+   $(CC) /Fomg_python.obj /GS /W3 /Gy /Zc:wchar_t /I "$(PYTHONDIR)\Include" /Zi /Gm- /O2 /Ob1 /fp:precise \
+         /D "WIN32" /D "NDEBUG" /D "_WINDOWS" /D "_VC80_UPGRADE=0x0710" /D "_WINDLL" /errorReport:prompt \
+         /GF /WX- /Zc:forScope /Gd /MD /FC /EHsc /c mg_python.c
+
+# Install mg_python module
+install :
+   copy mg_python.pyd $(PYTHONDIR)\DLLs\
+
+# Clean target
+clean :
+   del mg_python.pyd mg_python.pyd.manifest mg_python.obj mg_python.pdb mg_python.lib mg_python.exp vc*.pdb
+
