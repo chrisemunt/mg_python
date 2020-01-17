@@ -3,9 +3,11 @@
 A Python Extension for InterSystems **Cache/IRIS** and **YottaDB**.
 
 Chris Munt <cmunt@mgateway.com>  
-12 December 2019, M/Gateway Developments Ltd [http://www.mgateway.com](http://www.mgateway.com)
+17 January 2020, M/Gateway Developments Ltd [http://www.mgateway.com](http://www.mgateway.com)
 
-* Current Release: Version: 2.1; Revision 44 - Beta (12 December 2019)
+* Current Release: Version: 2.2; Revision 45 - Beta (17 January 2020)
+* [Release Notes](#RelNotes) can be found at the end of this document.
+
 
 ## Overview
 
@@ -67,12 +69,16 @@ Windows:
 
 ### InterSystems Cache/IRIS
 
-Log in to the Manager UCI and, using the %RI utility (or similar) load the **zmgsi** routines held in **/m/zmgsi.ro**.  Change to your development UCI and check the installation:
+Log in to the Manager UCI and install the **zmgsi** routines held in either **/m/zmgsi\_cache.xml** or **/m/zmgsi\_iris.xml** as appropriate.
+
+       do $system.OBJ.Load("/m/zmgsi_cache.xml","ck")
+
+Change to your development UCI and check the installation:
 
        do ^%zmgsi
 
        M/Gateway Developments Ltd - Service Integration Gateway
-       Version: 3.0; Revision 1 (13 June 2019)
+       Version: 3.2; Revision 5 (17 January 2020)
 
 ### YottaDB
 
@@ -100,13 +106,15 @@ Link all the **zmgsi** routines and check the installation:
        do ^%zmgsi
 
        M/Gateway Developments Ltd - Service Integration Gateway
-       Version: 3.0; Revision 1 (13 June 2019)
+       Version: 3.2; Revision 5 (17 January 2020)
 
 
 Note that the version of **zmgsi** is successfully displayed.
 
 
-## Setting up the network service
+## Setting up the network service (if required)
+
+The network setup described here is only required if TCP based connectivity is to be used to connect your Python code to the database, as opposed to the API based approach described later.
 
 The default TCP server port for **zmgsi** is **7041**.  If you wish to use an alternative port then modify the following instructions accordingly.
 
@@ -184,6 +192,103 @@ Alternatively, an alias can be assigned to the module name.  For example:
 Then methods can be invoked as:
 
        <alias>.<method>
+
+
+### Connecting the database.
+
+By default, **mg_python** will connect to the server over TCP - the default parameters for which being the database listening locally on port **7041**. This can be modified using the following function.
+
+       mg_python.m_set_host(<dbhandle>, <netname>, <port>, <username>, <password>)
+
+The first argument refers the server handle; zero being the default handle representing the default server (localhost listening on TCP port 7041).
+
+Example:
+
+       mg_python.m_set_host(0, "localhost", 7041, "", "")
+
+#### Connecting to the database via its API.
+
+As an alternative to connecting to the database using TCP based connectivity, **mg_python** provides the option of high-performance embedded access to a local installation of the database via its API.
+
+##### InterSystems Caché or IRIS.
+
+Use the following functions to bind to the database API.
+
+       mg_python.m_set_uci(<dbhandle>, <namespace>)
+       mg_python.m_bind_server_api(<dbhandle>, <dbtype>, <path>, <username>, <password>, <envvars>, <params>)
+
+Where:
+
+* dbhandle: Current server handle.
+* namespace: Namespace.
+* dbtype: Database type (‘Cache’ or ‘IRIS’).
+* path: Path to database manager directory.
+* username: Database username.
+* password: Database password.
+* envvars: List of required environment variables.
+* params: Reserved for future use.
+
+Example:
+
+       mg_python.m_set_uci(0, "USER")
+       result = mg_python.m_bind_server_api(0, "IRIS", "/usr/iris20191/mgr", "_SYSTEM", "SYS", "", "")
+
+The bind function will return '1' for success and '0' for failure.
+
+Before leaving your Python application, it is good practice to gracefully release the binding to the database:
+
+       mg_python.m_release_server_api(<dbhandle>)
+
+Example:
+
+       mg_python.m_release_server_api(0)
+
+##### YottaDB
+
+Use the following function to bind to the database API.
+
+       mg_python.m_bind_server_api(<dbhandle>, <dbtype>, <path>, <username>, <password>, <envvars>, <params>)
+
+Where:
+
+* dbhandle: Current server handle.
+* dbtype: Database type (‘YottaDB’).
+* path: Path to the YottaDB installation/library.
+* username: Database username.
+* password: Database password.
+* envvars: List of required environment variables.
+* params: Reserved for future use.
+
+Example:
+
+This example assumes that the YottaDB installation is in: **/usr/local/lib/yottadb/r122**. 
+This is where the **libyottadb.so** library is found.
+Also, in this directory, as indicated in the environment variables, the YottaDB routine interface file resides (**zmgsi.ci** in this example).  The interface file must contain the following line:
+
+       ifc_zmgsis: ydb_char_t * ifc^%zmgsis(I:ydb_char_t*, I:ydb_char_t *, I:ydb_char_t*)
+
+Moving on to the Python code for binding to the YottaDB database.  Modify the values of these environment variables in accordance with your own YottaDB installation.  Note that each line is terminated with a linefeed character, with a double linefeed at the end of the list.
+
+       envvars = "";
+       envvars = envvars + "ydb_dir=/root/.yottadb\n"
+       envvars = envvars + "ydb_rel=r1.22_x86_64\n"
+       envvars = envvars + "ydb_gbldir=/root/.yottadb/r1.22_x86_64/g/yottadb.gld\n"
+       envvars =envvars + "ydb_routines=/root/.yottadb/r1.22_x86_64/o*(/root/.yottadb/r1.22_x86_64/r root/.yottadb/r) /usr/local/lib/yottadb/r122/libyottadbutil.so\n"
+       envvars = envvars + "ydb_ci=/usr/local/lib/yottadb/r122/zmgsi.ci\n"
+       envvars = envvars + "\n"
+
+       result = mg_python.m_bind_server_api(0, "YottaDB", "/usr/local/lib/yottadb/r122", "", "", envvars, "")
+
+The bind function will return '1' for success and '0' for failure.
+
+Before leaving your Python application, it is good practice to gracefully release the binding to the database:
+
+       mg_python.m_release_server_api(<dbhandle>)
+
+Example:
+
+       mg_python.m_release_server_api(0)
+
 
 
 ## Invoking database commands from Python script
@@ -302,7 +407,7 @@ The **zmgsi** server-side code will write to the following global:
 
 ## License
 
-Copyright (c) 2018-2019 M/Gateway Developments Ltd,
+Copyright (c) 2018-2020 M/Gateway Developments Ltd,
 Surrey UK.                                                      
 All rights reserved.
  
@@ -315,4 +420,15 @@ Licensed under the Apache License, Version 2.0 (the "License"); you may not use 
       http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.      
+
+
+## <a name="RelNotes"></a>Release Notes
+
+### v2.1.44 (12 December 2019)
+
+* Initial Release
+
+### v2.2.45 (17 January 2020)
+
+* Introduce the option to connect to a local installation of the database via its high-performance API.
 
