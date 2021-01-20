@@ -3,18 +3,31 @@
 A Python Extension for InterSystems **Cache/IRIS** and **YottaDB**.
 
 Chris Munt <cmunt@mgateway.com>  
-17 January 2020, M/Gateway Developments Ltd [http://www.mgateway.com](http://www.mgateway.com)
+20 January 2021, M/Gateway Developments Ltd [http://www.mgateway.com](http://www.mgateway.com)
 
-* Current Release: Version: 2.2; Revision 45 - Beta (17 January 2020)
+* Current Release: Version: 2.2; Revision 45a.
+* Two connectivity models to the InterSystems or YottaDB database are provided: High performance via the local database API or network based.
 * [Release Notes](#RelNotes) can be found at the end of this document.
 
+Contents
 
-## Overview
+* [Overview](#Overview") 
+* [Pre-requisites](#PreReq") 
+* [Installing mg\_python](#Install)
+* [Using mg\_python](#Using)
+* [Connecting to the database](#Connect)
+* [Invocation of database commands](#DBCommands)
+* [Invocation of database functions](#DBFunctions)
+* [Direct access to InterSystems classes (IRIS and Cache)](#DBClasses)
+* [License](#License)
+
+
+## <a name="Overview"></a> Overview
 
 **mg_python** is an Open Source Python extension developed for InterSystems **Cache/IRIS** and the **YottaDB** database.  It will also work with the **GT.M** database and other **M-like** databases.
 
 
-## Pre-requisites
+## <a name="PreReq"></a> Pre-requisites 
 
 Python installation:
 
@@ -25,7 +38,8 @@ InterSystems **Cache/IRIS** or **YottaDB** (or similar M database):
        https://www.intersystems.com/
        https://yottadb.com/
 
-## Installing mg_python
+
+## <a name="Install"></a> Installing mg\_python
 
 There are three parts to **mg_python** installation and configuration.
 
@@ -67,36 +81,45 @@ Windows:
        python setup_win.py install
 
 
-### InterSystems Cache/IRIS
+### Installing the M support routines
 
-Log in to the Manager UCI and install the **zmgsi** routines held in either **/m/zmgsi\_cache.xml** or **/m/zmgsi\_iris.xml** as appropriate.
+The M support routines are required for:
 
-       do $system.OBJ.Load("/m/zmgsi_cache.xml","ck")
+* Network based access to databases.
 
-Change to your development UCI and check the installation:
+Two M routines need to be installed (%zmgsi and %zmgsis).  These can be found in the *Service Integration Gateway* (**mgsi**) GitHub source code repository ([https://github.com/chrisemunt/mgsi](https://github.com/chrisemunt/mgsi)).  Note that it is not necessary to install the whole *Service Integration Gateway*, just the two M routines held in that repository.
+
+#### Installation for InterSystems Cache/IRIS
+
+Log in to the %SYS Namespace and install the **zmgsi** routines held in **/isc/zmgsi\_isc.ro**.
+
+       do $system.OBJ.Load("/isc/zmgsi_isc.ro","ck")
+
+Change to your development Namespace and check the installation:
 
        do ^%zmgsi
 
        M/Gateway Developments Ltd - Service Integration Gateway
-       Version: 3.2; Revision 5 (17 January 2020)
+       Version: 3.6; Revision 15 (6 November 2020)
 
-### YottaDB
 
-The instructions given here assume a standard 'out of the box' installation of **YottaDB** deployed in the following location:
+#### Installation for YottaDB
 
-       /usr/local/lib/yottadb/r122
+The instructions given here assume a standard 'out of the box' installation of **YottaDB** (version 1.30) deployed in the following location:
+
+       /usr/local/lib/yottadb/r130
 
 The primary default location for routines:
 
-       /root/.yottadb/r1.22_x86_64/r
+       /root/.yottadb/r1.30_x86_64/r
 
 Copy all the routines (i.e. all files with an 'm' extension) held in the GitHub **/yottadb** directory to:
 
-       /root/.yottadb/r1.22_x86_64/r
+       /root/.yottadb/r1.30_x86_64/r
 
 Change directory to the following location and start a **YottaDB** command shell:
 
-       cd /usr/local/lib/yottadb/r122
+       cd /usr/local/lib/yottadb/r130
        ./ydb
 
 Link all the **zmgsi** routines and check the installation:
@@ -106,21 +129,18 @@ Link all the **zmgsi** routines and check the installation:
        do ^%zmgsi
 
        M/Gateway Developments Ltd - Service Integration Gateway
-       Version: 3.2; Revision 5 (17 January 2020)
-
+       Version: 3.6; Revision 15 (6 November 2020)
 
 Note that the version of **zmgsi** is successfully displayed.
 
 
-## Setting up the network service (if required)
-
-The network setup described here is only required if TCP based connectivity is to be used to connect your Python code to the database, as opposed to the API based approach described later.
+### Setting up the network service (for network based connectivity only)
 
 The default TCP server port for **zmgsi** is **7041**.  If you wish to use an alternative port then modify the following instructions accordingly.
 
-Python code using the **mg_python** methods will, by default, expect the database server to be listening on port **7041** of the local server (localhost).  However, **mg_python** provides the functionality to modify these default settings at run-time.  It is not necessary for the web server/Python installation to reside on the same host as the database server.
+Python code using the **mg\_python** functions will, by default, expect the database server to be listening on port **7041** of the local server (localhost).  However, **mg\_python** provides the functionality to modify these default settings at run-time.  It is not necessary for the Python installation to reside on the same host as the database server.
 
-### InterSystems Cache/IRIS
+#### InterSystems Cache/IRIS
 
 Start the Cache/IRIS-hosted concurrent TCP service in the Manager UCI:
 
@@ -128,23 +148,27 @@ Start the Cache/IRIS-hosted concurrent TCP service in the Manager UCI:
 
 To use a server TCP port other than 7041, specify it in the start-up command (as opposed to using zero to indicate the default port of 7041).
 
-### YottaDB
+#### YottaDB
 
-Network connectivity to **YottaDB** is managed via the **xinetd** service.  First create the following launch script (called **zmgsi_ydb** here):
+Network connectivity to **YottaDB** is managed via the **xinetd** service.  First create the following launch script (called **zmgsi\_ydb** here):
 
-       /usr/local/lib/yottadb/r122/zmgsi_ydb
+       /usr/local/lib/yottadb/r130/zmgsi_ydb
 
 Content:
 
        #!/bin/bash
-       cd /usr/local/lib/yottadb/r122
+       cd /usr/local/lib/yottadb/r130
        export ydb_dir=/root/.yottadb
-       export ydb_dist=/usr/local/lib/yottadb/r122
-       export ydb_routines="/root/.yottadb/r1.22_x86_64/o*(/root/.yottadb/r1.22_x86_64/r /root/.yottadb/r) /usr/local/lib/yottadb/r122/libyottadbutil.so"
-       export ydb_gbldir="/root/.yottadb/r1.22_x86_64/g/yottadb.gld"
+       export ydb_dist=/usr/local/lib/yottadb/r130
+       export ydb_routines="/root/.yottadb/r1.30_x86_64/o*(/root/.yottadb/r1.30_x86_64/r /root/.yottadb/r) /usr/local/lib/yottadb/r130/libyottadbutil.so"
+       export ydb_gbldir="/root/.yottadb/r1.30_x86_64/g/yottadb.gld"
        $ydb_dist/ydb -r xinetd^%zmgsis
 
-Create the **xinetd** script (called **zmgsi_xinetd** here): 
+Note that you should, if necessary, modify the permissions on this file so that it is executable.  For example:
+
+       chmod a=rx /usr/local/lib/yottadb/r130/zmgsi_ydb
+
+Create the **xinetd** script (called **zmgsi\_xinetd** here): 
 
        /etc/xinetd.d/zmgsi_xinetd
 
@@ -158,10 +182,10 @@ Content:
             socket_type     = stream
             wait            = no
             user            = root
-            server          = /usr/local/lib/yottadb/r122/zmgsi_ydb
+            server          = /usr/local/lib/yottadb/r130/zmgsi_ydb
        }
 
-* Note: sample copies of **zmgsi_xinetd** and **zmgsi_ydb** are included in the **/unix** directory.
+* Note: sample copies of **zmgsi\_xinetd** and **zmgsi\_ydb** are included in the **/unix** directory of the **mgsi** GitHub repository [here](https://github.com/chrisemunt/mgsi).
 
 Edit the services file:
 
@@ -175,7 +199,15 @@ Finally restart the **xinetd** service:
 
        /etc/init.d/xinetd restart
 
-## Using mg_python
+
+### Resources used by zmgsi
+
+The **zmgsi** server-side code will write to the following global:
+
+* **^zmgsi**: The event Log. 
+
+
+## <a name="Using"></a> Using mg\_python
 
 Python programs may refer to, and load, the **mg_python** module using the following directive at the top of the script.
 
@@ -194,7 +226,7 @@ Then methods can be invoked as:
        <alias>.<method>
 
 
-### Connecting the database.
+## <a name="Connect"></a> Connecting to the database
 
 By default, **mg_python** will connect to the server over TCP - the default parameters for which being the database listening locally on port **7041**. This can be modified using the following function.
 
@@ -206,11 +238,11 @@ Example:
 
        mg_python.m_set_host(0, "localhost", 7041, "", "")
 
-#### Connecting to the database via its API.
+### Connecting to the database via its API.
 
 As an alternative to connecting to the database using TCP based connectivity, **mg_python** provides the option of high-performance embedded access to a local installation of the database via its API.
 
-##### InterSystems Caché or IRIS.
+#### InterSystems Caché or IRIS.
 
 Use the following functions to bind to the database API.
 
@@ -243,7 +275,7 @@ Example:
 
        mg_python.m_release_server_api(0)
 
-##### YottaDB
+#### YottaDB
 
 Use the following function to bind to the database API.
 
@@ -261,7 +293,7 @@ Where:
 
 Example:
 
-This example assumes that the YottaDB installation is in: **/usr/local/lib/yottadb/r122**. 
+This example assumes that the YottaDB installation is in: **/usr/local/lib/yottadb/r130**. 
 This is where the **libyottadb.so** library is found.
 Also, in this directory, as indicated in the environment variables, the YottaDB routine interface file resides (**zmgsi.ci** in this example).  The interface file must contain the following line:
 
@@ -271,13 +303,13 @@ Moving on to the Python code for binding to the YottaDB database.  Modify the va
 
        envvars = "";
        envvars = envvars + "ydb_dir=/root/.yottadb\n"
-       envvars = envvars + "ydb_rel=r1.22_x86_64\n"
-       envvars = envvars + "ydb_gbldir=/root/.yottadb/r1.22_x86_64/g/yottadb.gld\n"
-       envvars =envvars + "ydb_routines=/root/.yottadb/r1.22_x86_64/o*(/root/.yottadb/r1.22_x86_64/r root/.yottadb/r) /usr/local/lib/yottadb/r122/libyottadbutil.so\n"
-       envvars = envvars + "ydb_ci=/usr/local/lib/yottadb/r122/zmgsi.ci\n"
+       envvars = envvars + "ydb_rel=r1.30_x86_64\n"
+       envvars = envvars + "ydb_gbldir=/root/.yottadb/r1.30_x86_64/g/yottadb.gld\n"
+       envvars =envvars + "ydb_routines=/root/.yottadb/r1.30_x86_64/o*(/root/.yottadb/r1.30_x86_64/r root/.yottadb/r) /usr/local/lib/yottadb/r130/libyottadbutil.so\n"
+       envvars = envvars + "ydb_ci=/usr/local/lib/yottadb/r130/zmgsi.ci\n"
        envvars = envvars + "\n"
 
-       result = mg_python.m_bind_server_api(0, "YottaDB", "/usr/local/lib/yottadb/r122", "", "", envvars, "")
+       result = mg_python.m_bind_server_api(0, "YottaDB", "/usr/local/lib/yottadb/r130", "", "", envvars, "")
 
 The bind function will return '1' for success and '0' for failure.
 
@@ -290,8 +322,7 @@ Example:
        mg_python.m_release_server_api(0)
 
 
-
-## Invoking database commands from Python script
+## <a name="DBCommands"></a> Invocation of database commands
 
 Before invoking database functionality,the following simple script can be used to check that **mg_python** is successfully installed.
 
@@ -299,7 +330,7 @@ Before invoking database functionality,the following simple script can be used t
 
 This should return something like:
 
-       M/Gateway Developments Ltd. - mg_python: Python Gateway to M - Version 3.0.1
+       M/Gateway Developments Ltd. - mg_python: Python Gateway to M - Version 2.2.45
 
 Now consider the following database script:
 
@@ -316,7 +347,7 @@ In the above examples, the first argument refers the server handle; zero being t
 **mg_python** provides functions to invoke all database commands and functions.
 
 
-#### Set a record
+### Set a record
 
        result = mg_python.m_set(<dbhandle>, <global>, <key>, <data>)
       
@@ -324,7 +355,7 @@ Example:
 
        result = mg_python.m_set(0, "^Person", 1, "Chris Munt")
 
-#### Get a record
+### Get a record
 
        result = mg_python.m_get(<dbhandle>, <global>, <key>)
       
@@ -332,7 +363,7 @@ Example:
 
        result = mg_python.m_get(0, "^Person", 1)
 
-#### Delete a record
+### Delete a record
 
        result = mg_python.m_delete(<dbhandle>, <global>, <key>)
       
@@ -341,7 +372,7 @@ Example:
        result = mg_python.m_delete(0, "^Person", 1)
 
 
-#### Check whether a record is defined
+### Check whether a record is defined
 
        result = mg_python.m_defined(<dbhandle>, <global>, <key>)
       
@@ -350,7 +381,7 @@ Example:
        result = mg_python.m_defined(0, "^Person", 1)
 
 
-#### Parse a set of records (in order)
+### Parse a set of records (in order)
 
        result = mg_python.m_order(<dbhandle>, <global>, <key>)
       
@@ -362,7 +393,7 @@ Example:
           key  = mg_python.m_order(0, "^Person", key)
 
 
-#### Parse a set of records (in reverse order)
+### Parse a set of records (in reverse order)
 
        result = mg_python.m_previous(<dbhandle>, <global>, <key>)
       
@@ -373,7 +404,8 @@ Example:
           print(key, " = ", mg_python.m_get(0, "^Person", key))
           key  = mg_python.m_previous(0, "^Person", key)
 
-## Invocation of database functions
+
+## <a name="DBFunctions"> Invocation of database functions
 
        result = mg_python.m_function(<dbhandle>, <function>, <parameters>)
       
@@ -389,9 +421,9 @@ Python invocation:
       result = mg_python.m_function(0, "add^math", 2, 3);
 
 
-## Direct access to InterSystems classes (IRIS and Cache)
+## <a name="DBClasses"> Direct access to InterSystems classes (IRIS and Cache)
 
-#### Invocation of a ClassMethod
+### Invocation of a ClassMethod
 
        result = mg_python.m_classmethod(<dbhandle>, <class_name>, <classmethod_name>, <parameters>);
       
@@ -399,15 +431,10 @@ Example (Encode a date to internal storage format):
 
         result = mg_python.m_classmethod("%Library.Date", "DisplayToLogical", "10/10/2019");
 
-## Resources used by zmgsi
 
-The **zmgsi** server-side code will write to the following global:
+## <a name="License"></a> License
 
-* **^zmgsi**: The event Log. 
-
-## License
-
-Copyright (c) 2018-2020 M/Gateway Developments Ltd,
+Copyright (c) 2018-2021 M/Gateway Developments Ltd,
 Surrey UK.                                                      
 All rights reserved.
  
@@ -432,3 +459,6 @@ Unless required by applicable law or agreed to in writing, software distributed 
 
 * Introduce the option to connect to a local installation of the database via its high-performance API.
 
+### v2.2.45a (20 January 2021)
+
+* Restructure and update the documentation.
