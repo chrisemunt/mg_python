@@ -5,7 +5,7 @@
    |              and YottaDB API                                             |
    | Author:      Chris Munt cmunt@mgateway.com                               |
    |                         chris.e.munt@gmail.com                           |
-   | Copyright (c) 2017-2020 M/Gateway Developments Ltd,                      |
+   | Copyright (c) 2017-2021 M/Gateway Developments Ltd,                      |
    | Surrey UK.                                                               |
    | All rights reserved.                                                     |
    |                                                                          |
@@ -61,36 +61,19 @@
 #endif
 
 #if defined(_WIN32)
-/*
-#include <windows.h>
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
-*/
+
 #include <stdlib.h>
-#define INCL_WINSOCK_API_TYPEDEFS 1
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
 
+#if defined(__MINGW32__)
+#include <math.h>
+#endif
 
 #else
-/*
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <time.h>
-#include <errno.h>
-#include <unistd.h>
-#include <sys/time.h>
-#include <pthread.h>
-#include <dlfcn.h>
-#include <signal.h>
-#include <pwd.h>
-*/
 
 #include <stdio.h>
 #include <string.h>
@@ -126,6 +109,10 @@
 
 #endif
 
+
+#ifndef INCL_WINSOCK_API_TYPEDEFS
+#define MG_USE_MS_TYPEDEFS 1
+#endif
 
 /* Cache/IRIS */
 
@@ -339,7 +326,7 @@ typedef int    xc_status_t;
    } \
 
 
-#define NETX_TIMEOUT             10
+#define NETX_TIMEOUT             30
 #define NETX_IPV6                1
 #define NETX_READ_EOF            0
 #define NETX_READ_NOCON          -1
@@ -348,14 +335,20 @@ typedef int    xc_status_t;
 #define NETX_RECV_BUFFER         32768
 
 #if defined(LINUX)
-#define NETX_MEMCPY(a,b,c)           memmove(a,b,c)
+#define NETX_MEMCPY(a,b,c)       memmove(a,b,c)
 #else
-#define NETX_MEMCPY(a,b,c)           memcpy(a,b,c)
+#define NETX_MEMCPY(a,b,c)       memcpy(a,b,c)
 #endif
+
+
+typedef void * (* MG_MALLOC)     (unsigned long size);
+typedef void * (* MG_REALLOC)    (void *p, unsigned long size);
+typedef int    (* MG_FREE)       (void *p);
+
 
 #if defined(_WIN32)
 
-#if !defined(MG_DBA_EMBEDDED)
+#if defined(MG_DBA_DSO)
 #define DBX_EXTFUN(a)    __declspec(dllexport) a __cdecl
 #else
 #define DBX_EXTFUN(a)    a
@@ -404,7 +397,7 @@ typedef int    xc_status_t;
 
 #define  NETX_FD_ISSET(fd, set)              netx_so.p_WSAFDIsSet((SOCKET)(fd), (fd_set *)(set))
 
-typedef int (WINAPI * LPFN_WSAFDISSET)       (SOCKET, fd_set *);
+typedef int (WINAPI * MG_LPFN_WSAFDISSET)       (SOCKET, fd_set *);
 
 typedef DWORD           DBXTHID;
 typedef HINSTANCE       DBXPLIB;
@@ -521,6 +514,121 @@ typedef size_t          socklen_netx;
 
 #endif /* #if defined(_WIN32) */
 
+#if defined(__MINGW32__)
+
+typedef
+INT
+(WSAAPI * LPFN_INET_PTONA)(
+    __in                                INT             Family,
+    __in                                PCSTR           pszAddrString,
+    __out_bcount(sizeof(IN6_ADDR))      PVOID           pAddrBuf
+    );
+
+#define LPFN_INET_PTON          LPFN_INET_PTONA
+
+typedef
+PCSTR
+(WSAAPI * LPFN_INET_NTOPA)(
+    __in                                INT             Family,
+    __in                                PVOID           pAddr,
+    __out_ecount(StringBufSize)         PSTR            pStringBuf,
+    __in                                size_t          StringBufSize
+    );
+
+#define LPFN_INET_NTOP          LPFN_INET_NTOPA
+
+#endif
+
+
+#if defined(_WIN32)
+#if defined(MG_USE_MS_TYPEDEFS)
+
+typedef LPFN_WSASOCKET                MG_LPFN_WSASOCKET;
+typedef LPFN_WSAGETLASTERROR          MG_LPFN_WSAGETLASTERROR; 
+typedef LPFN_WSASTARTUP               MG_LPFN_WSASTARTUP;
+typedef LPFN_WSACLEANUP               MG_LPFN_WSACLEANUP;
+typedef LPFN_WSARECV                  MG_LPFN_WSARECV;
+typedef LPFN_WSASEND                  MG_LPFN_WSASEND;
+
+#if defined(NETX_IPV6)
+typedef LPFN_WSASTRINGTOADDRESS       MG_LPFN_WSASTRINGTOADDRESS;
+typedef LPFN_WSAADDRESSTOSTRING       MG_LPFN_WSAADDRESSTOSTRING;
+typedef LPFN_GETADDRINFO              MG_LPFN_GETADDRINFO;
+typedef LPFN_FREEADDRINFO             MG_LPFN_FREEADDRINFO;
+typedef LPFN_GETNAMEINFO              MG_LPFN_GETNAMEINFO;
+typedef LPFN_GETPEERNAME              MG_LPFN_GETPEERNAME;
+typedef LPFN_INET_NTOP                MG_LPFN_INET_NTOP;
+typedef LPFN_INET_PTON                MG_LPFN_INET_PTON;
+#endif
+
+typedef LPFN_CLOSESOCKET              MG_LPFN_CLOSESOCKET;
+typedef LPFN_GETHOSTNAME              MG_LPFN_GETHOSTNAME;
+typedef LPFN_GETHOSTBYNAME            MG_LPFN_GETHOSTBYNAME;
+typedef LPFN_GETHOSTBYADDR            MG_LPFN_GETHOSTBYADDR;
+typedef LPFN_GETSERVBYNAME            MG_LPFN_GETSERVBYNAME;
+
+typedef LPFN_HTONS                    MG_LPFN_HTONS;
+typedef LPFN_HTONL                    MG_LPFN_HTONL;
+typedef LPFN_NTOHL                    MG_LPFN_NTOHL;
+typedef LPFN_NTOHS                    MG_LPFN_NTOHS;
+typedef LPFN_CONNECT                  MG_LPFN_CONNECT;
+typedef LPFN_INET_ADDR                MG_LPFN_INET_ADDR;
+typedef LPFN_INET_NTOA                MG_LPFN_INET_NTOA;
+
+typedef LPFN_SOCKET                   MG_LPFN_SOCKET;
+typedef LPFN_SETSOCKOPT               MG_LPFN_SETSOCKOPT;
+typedef LPFN_GETSOCKOPT               MG_LPFN_GETSOCKOPT;
+typedef LPFN_GETSOCKNAME              MG_LPFN_GETSOCKNAME;
+typedef LPFN_SELECT                   MG_LPFN_SELECT;
+typedef LPFN_RECV                     MG_LPFN_RECV;
+typedef LPFN_SEND                     MG_LPFN_SEND;
+typedef LPFN_SHUTDOWN                 MG_LPFN_SHUTDOWN;
+typedef LPFN_BIND                     MG_LPFN_BIND;
+typedef LPFN_LISTEN                   MG_LPFN_LISTEN;
+typedef LPFN_ACCEPT                   MG_LPFN_ACCEPT;
+
+#else
+
+typedef int                   (WSAAPI * MG_LPFN_WSASTARTUP)          (WORD wVersionRequested, LPWSADATA lpWSAData);
+typedef int                   (WSAAPI * MG_LPFN_WSACLEANUP)          (void);
+typedef int                   (WSAAPI * MG_LPFN_WSAGETLASTERROR)     (void);
+typedef SOCKET                (WSAAPI * MG_LPFN_WSASOCKET)           (int af, int type, int protocol, LPWSAPROTOCOL_INFOA lpProtocolInfo, GROUP g, DWORD dwFlags);
+typedef int                   (WSAAPI * MG_LPFN_WSARECV)             (SOCKET s, LPWSABUF lpBuffers, DWORD dwBufferCount, LPDWORD lpNumberOfBytesRecvd, LPDWORD lpFlags, LPWSAOVERLAPPED lpOverlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine);
+typedef int                   (WSAAPI * MG_LPFN_WSASEND)             (SOCKET s, LPWSABUF lpBuffers, DWORD dwBufferCount, LPDWORD lpNumberOfBytesSent, DWORD dwFlags, LPWSAOVERLAPPED lpOverlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine);
+typedef INT                   (WSAAPI * MG_LPFN_WSASTRINGTOADDRESS)  (LPSTR AddressString, INT AddressFamily, LPWSAPROTOCOL_INFOA lpProtocolInfo, LPSOCKADDR lpAddress, LPINT lpAddressLength);
+typedef INT                   (WSAAPI * MG_LPFN_WSAADDRESSTOSTRING)  (LPSOCKADDR lpsaAddress, DWORD dwAddressLength, LPWSAPROTOCOL_INFOA lpProtocolInfo, LPSTR lpszAddressString, LPDWORD lpdwAddressStringLength);
+typedef INT                   (WSAAPI * MG_LPFN_GETADDRINFO)         (PCSTR pNodeName, PCSTR pServiceName, const ADDRINFOA * pHints, PADDRINFOA * ppResult);
+typedef VOID                  (WSAAPI * MG_LPFN_FREEADDRINFO)        (PADDRINFOA pAddrInfo);
+typedef int                   (WSAAPI * MG_LPFN_GETNAMEINFO)         (const SOCKADDR * pSockaddr, socklen_t SockaddrLength, PCHAR pNodeBuffer, DWORD NodeBufferSize, PCHAR pServiceBuffer, DWORD ServiceBufferSize, INT Flags);
+typedef int                   (WSAAPI * MG_LPFN_GETPEERNAME)         (SOCKET s, struct sockaddr FAR * name, int FAR * namelen);
+typedef PCSTR                 (WSAAPI * MG_LPFN_INET_NTOP)           (INT Family, PVOID pAddr, PSTR pStringBuf, size_t StringBufSize);
+typedef INT                   (WSAAPI * MG_LPFN_INET_PTON)           (INT Family, PCSTR pszAddrString, PVOID pAddrBuf);
+typedef int                   (WSAAPI * MG_LPFN_CLOSESOCKET)         (SOCKET s);
+typedef int                   (WSAAPI * MG_LPFN_GETHOSTNAME)         (char FAR * name, int namelen);
+typedef struct hostent FAR *  (WSAAPI * MG_LPFN_GETHOSTBYNAME)       (const char FAR * name);
+typedef struct hostent FAR *  (WSAAPI * MG_LPFN_GETHOSTBYADDR)       (const char FAR * addr, int len, int type);
+typedef struct servent FAR *  (WSAAPI * MG_LPFN_GETSERVBYNAME)       (const char FAR * name, const char FAR * proto);
+typedef u_short               (WSAAPI * MG_LPFN_HTONS)               (u_short hostshort);
+typedef u_long                (WSAAPI * MG_LPFN_HTONL)               (u_long hostlong);
+typedef u_long                (WSAAPI * MG_LPFN_NTOHL)               (u_long netlong);
+typedef u_short               (WSAAPI * MG_LPFN_NTOHS)               (u_short netshort);
+typedef char FAR *            (WSAAPI * MG_LPFN_INET_NTOA)           (struct in_addr in);
+typedef int                   (WSAAPI * MG_LPFN_CONNECT)             (SOCKET s, const struct sockaddr FAR * name, int namelen);
+typedef unsigned long         (WSAAPI * MG_LPFN_INET_ADDR)           (const char FAR * cp);
+typedef SOCKET                (WSAAPI * MG_LPFN_SOCKET)              (int af, int type, int protocol);
+typedef int                   (WSAAPI * MG_LPFN_SETSOCKOPT)          (SOCKET s, int level, int optname, const char FAR * optval, int optlen);
+typedef int                   (WSAAPI * MG_LPFN_GETSOCKOPT)          (SOCKET s, int level, int optname, char FAR * optval, int FAR * optlen);
+typedef int                   (WSAAPI * MG_LPFN_GETSOCKNAME)         (SOCKET s, struct sockaddr FAR * name, int FAR * namelen);
+typedef int                   (WSAAPI * MG_LPFN_SELECT)              (int nfds, fd_set FAR * readfds, fd_set FAR * writefds, fd_set FAR *exceptfds, const struct timeval FAR * timeout);
+typedef int                   (WSAAPI * MG_LPFN_RECV)                (SOCKET s, char FAR * buf, int len, int flags);
+typedef int                   (WSAAPI * MG_LPFN_SEND)                (SOCKET s, const char FAR * buf, int len, int flags);
+typedef int                   (WSAAPI * MG_LPFN_SHUTDOWN)            (SOCKET s, int how);
+typedef int                   (WSAAPI * MG_LPFN_BIND)                (SOCKET s, const struct sockaddr FAR * name, int namelen);
+typedef int                   (WSAAPI * MG_LPFN_LISTEN)              (SOCKET s, int backlog);
+typedef SOCKET                (WSAAPI * MG_LPFN_ACCEPT)              (SOCKET s, struct sockaddr FAR * addr, int FAR * addrlen);
+
+#endif
+#endif /* #if defined(_WIN32) */
 
 typedef struct tagNETXSOCK {
 
@@ -538,23 +646,23 @@ typedef struct tagNETXSOCK {
    WSADATA                       wsadata;
    int                           wsastartup;
    WORD                          version_requested;
-   LPFN_WSASOCKET                p_WSASocket;
-   LPFN_WSAGETLASTERROR          p_WSAGetLastError; 
-   LPFN_WSASTARTUP               p_WSAStartup;
-   LPFN_WSACLEANUP               p_WSACleanup;
-   LPFN_WSAFDISSET               p_WSAFDIsSet;
-   LPFN_WSARECV                  p_WSARecv;
-   LPFN_WSASEND                  p_WSASend;
+   MG_LPFN_WSASOCKET                p_WSASocket;
+   MG_LPFN_WSAGETLASTERROR          p_WSAGetLastError; 
+   MG_LPFN_WSASTARTUP               p_WSAStartup;
+   MG_LPFN_WSACLEANUP               p_WSACleanup;
+   MG_LPFN_WSAFDISSET               p_WSAFDIsSet;
+   MG_LPFN_WSARECV                  p_WSARecv;
+   MG_LPFN_WSASEND                  p_WSASend;
 
 #if defined(NETX_IPV6)
-   LPFN_WSASTRINGTOADDRESS       p_WSAStringToAddress;
-   LPFN_WSAADDRESSTOSTRING       p_WSAAddressToString;
-   LPFN_GETADDRINFO              p_getaddrinfo;
-   LPFN_FREEADDRINFO             p_freeaddrinfo;
-   LPFN_GETNAMEINFO              p_getnameinfo;
-   LPFN_GETPEERNAME              p_getpeername;
-   LPFN_INET_NTOP                p_inet_ntop;
-   LPFN_INET_PTON                p_inet_pton;
+   MG_LPFN_WSASTRINGTOADDRESS       p_WSAStringToAddress;
+   MG_LPFN_WSAADDRESSTOSTRING       p_WSAAddressToString;
+   MG_LPFN_GETADDRINFO              p_getaddrinfo;
+   MG_LPFN_FREEADDRINFO             p_freeaddrinfo;
+   MG_LPFN_GETNAMEINFO              p_getnameinfo;
+   MG_LPFN_GETPEERNAME              p_getpeername;
+   MG_LPFN_INET_NTOP                p_inet_ntop;
+   MG_LPFN_INET_PTON                p_inet_pton;
 #else
    LPVOID                        p_WSAStringToAddress;
    LPVOID                        p_WSAAddressToString;
@@ -566,40 +674,48 @@ typedef struct tagNETXSOCK {
    LPVOID                        p_inet_pton;
 #endif
 
-   LPFN_CLOSESOCKET              p_closesocket;
-   LPFN_GETHOSTNAME              p_gethostname;
-   LPFN_GETHOSTBYNAME            p_gethostbyname;
-   LPFN_GETHOSTBYADDR            p_gethostbyaddr;
-   LPFN_GETSERVBYNAME            p_getservbyname;
+   MG_LPFN_CLOSESOCKET              p_closesocket;
+   MG_LPFN_GETHOSTNAME              p_gethostname;
+   MG_LPFN_GETHOSTBYNAME            p_gethostbyname;
+   MG_LPFN_GETHOSTBYADDR            p_gethostbyaddr;
+   MG_LPFN_GETSERVBYNAME            p_getservbyname;
 
-   LPFN_HTONS                    p_htons;
-   LPFN_HTONL                    p_htonl;
-   LPFN_NTOHL                    p_ntohl;
-   LPFN_NTOHS                    p_ntohs;
-   LPFN_CONNECT                  p_connect;
-   LPFN_INET_ADDR                p_inet_addr;
-   LPFN_INET_NTOA                p_inet_ntoa;
+   MG_LPFN_HTONS                    p_htons;
+   MG_LPFN_HTONL                    p_htonl;
+   MG_LPFN_NTOHL                    p_ntohl;
+   MG_LPFN_NTOHS                    p_ntohs;
+   MG_LPFN_CONNECT                  p_connect;
+   MG_LPFN_INET_ADDR                p_inet_addr;
+   MG_LPFN_INET_NTOA                p_inet_ntoa;
 
-   LPFN_SOCKET                   p_socket;
-   LPFN_SETSOCKOPT               p_setsockopt;
-   LPFN_GETSOCKOPT               p_getsockopt;
-   LPFN_GETSOCKNAME              p_getsockname;
-   LPFN_SELECT                   p_select;
-   LPFN_RECV                     p_recv;
-   LPFN_SEND                     p_send;
-   LPFN_SHUTDOWN                 p_shutdown;
-   LPFN_BIND                     p_bind;
-   LPFN_LISTEN                   p_listen;
-   LPFN_ACCEPT                   p_accept;
+   MG_LPFN_SOCKET                   p_socket;
+   MG_LPFN_SETSOCKOPT               p_setsockopt;
+   MG_LPFN_GETSOCKOPT               p_getsockopt;
+   MG_LPFN_GETSOCKNAME              p_getsockname;
+   MG_LPFN_SELECT                   p_select;
+   MG_LPFN_RECV                     p_recv;
+   MG_LPFN_SEND                     p_send;
+   MG_LPFN_SHUTDOWN                 p_shutdown;
+   MG_LPFN_BIND                     p_bind;
+   MG_LPFN_LISTEN                   p_listen;
+   MG_LPFN_ACCEPT                   p_accept;
 #endif /* #if defined(_WIN32) */
 
 } NETXSOCK, *PNETXSOCK;
 
 
-typedef struct tagDBXDEBUG {
-   unsigned char  debug;
-   FILE *         p_fdebug;
-} DBXDEBUG, *PDBXDEBUG;
+typedef struct tagDBXLOG {
+   char log_file[128];
+   char log_level[8];
+   char log_filter[64];
+   short log_errors;
+   short log_functions;
+   short log_transmissions;
+   unsigned long req_no;
+   unsigned long fun_no;
+   char product[4];
+   char product_version[16];
+} DBXLOG, *PDBXLOG;
 
 
 typedef struct tagDBXZV {
@@ -744,6 +860,11 @@ typedef struct tagDBXISCSO {
 
    int               (* p_CacheEnableMultiThread)        (void);
 
+   int               (* p_CacheTStart)                   (void);
+   int               (* p_CacheTLevel)                   (void);
+   int               (* p_CacheTCommit)                  (void);
+   int               (* p_CacheTRollback)                (int nlev);
+
 } DBXISCSO, *PDBXISCSO;
 
 
@@ -810,8 +931,8 @@ typedef struct tagDBXCON {
    DBXMUTEX       db_mutex;
    DBXZV          *p_zv;
    DBXZV          zv;
-   DBXDEBUG       *p_debug;
-   DBXDEBUG       debug;
+   DBXLOG         *p_log;
+   DBXLOG         log;
    DBXISCSO       *p_isc_so;
    DBXYDBSO       *p_ydb_so;
    DBXGTMSO       *p_gtm_so;
@@ -845,14 +966,21 @@ typedef struct tagDBXCON {
 
 
 #define MG_HOST                  "127.0.0.1"
-/*
-#define MG_PORT                  7040
-*/
+#if defined(MG_DEFAULT_PORT)
+#define MG_PORT                  MG_DEFAULT_PORT
+#else
 #define MG_PORT                  7041
+#endif
 #define MG_SERVER                "LOCAL"
 #define MG_UCI                   "USER"
 
-#if !defined(MG_DBA_EMBEDDED)
+#if defined(MG_DBA_DSO)
+#define MG_EXT_NAME              "mg_dba"
+#ifdef _WIN32
+#define MG_LOG_FILE              "c:/temp/" MG_EXT_NAME ".log"
+#else
+#define MG_LOG_FILE              "/tmp/" MG_EXT_NAME ".log"
+#endif
 #define MG_PRODUCT               "g"
 #endif
 
@@ -907,11 +1035,23 @@ typedef struct tagMGSRV {
    char        username[64];
    char        password[256];
    char        dbtype_name[32];
+   char        product[4];
    MGBUF *     p_env;
    MGBUF *     p_params;
+   DBXLOG *    p_log;
    PDBXCON     pcon[MG_MAXCON];
 } MGSRV, *LPMGSRV;
 
+
+#if defined(_WIN32)
+extern CRITICAL_SECTION  dbx_global_mutex;
+#else
+extern pthread_mutex_t   dbx_global_mutex;
+#endif
+
+extern MG_MALLOC     dbx_ext_malloc;
+extern MG_REALLOC    dbx_ext_realloc;
+extern MG_FREE       dbx_ext_free;
 
 DBX_EXTFUN(int)         dbx_init                      ();
 DBX_EXTFUN(int)         dbx_version                   (int index, char *output, int output_len);
@@ -924,6 +1064,10 @@ DBX_EXTFUN(int)         dbx_previous                  (unsigned char *input, uns
 DBX_EXTFUN(int)         dbx_delete                    (unsigned char *input, unsigned char *output);
 DBX_EXTFUN(int)         dbx_defined                   (unsigned char *input, unsigned char *output);
 DBX_EXTFUN(int)         dbx_increment                 (unsigned char *input, unsigned char *output);
+DBX_EXTFUN(int)         dbx_tstart                    (unsigned char *input, unsigned char *output);
+DBX_EXTFUN(int)         dbx_tlevel                    (unsigned char *input, unsigned char *output);
+DBX_EXTFUN(int)         dbx_tcommit                   (unsigned char *input, unsigned char *output);
+DBX_EXTFUN(int)         dbx_trollback                 (unsigned char *input, unsigned char *output);
 DBX_EXTFUN(int)         dbx_function                  (unsigned char *input, unsigned char *output);
 DBX_EXTFUN(int)         dbx_classmethod               (unsigned char *input, unsigned char *output);
 DBX_EXTFUN(int)         dbx_method                    (unsigned char *input, unsigned char *output);
@@ -977,8 +1121,9 @@ int                     mg_free                       (void *p, short id);
 int                     mg_ucase                      (char *string);
 int                     mg_lcase                      (char *string);
 int                     mg_create_string              (DBXCON *pcon, void *data, short type);
-int                     mg_buffer_dump                (DBXCON *pcon, void *buffer, unsigned int len, char *title, short mode);
-int                     mg_log_event                  (DBXDEBUG *p_debug, char *message, char *title, int level);
+int                     mg_log_init                   (DBXLOG *p_log);
+int                     mg_log_event                  (DBXLOG *p_log, char *message, char *title, int level);
+int                     mg_log_buffer                 (DBXLOG *p_log, char *buffer, int buffer_len, char *title, int level);
 int                     mg_pause                      (int msecs);
 DBXPLIB                 mg_dso_load                   (char *library);
 DBXPROC                 mg_dso_sym                    (DBXPLIB p_library, char *symbol);
@@ -994,6 +1139,8 @@ int                     mg_mutex_create               (DBXMUTEX *p_mutex);
 int                     mg_mutex_lock                 (DBXMUTEX *p_mutex, int timeout);
 int                     mg_mutex_unlock               (DBXMUTEX *p_mutex);
 int                     mg_mutex_destroy              (DBXMUTEX *p_mutex);
+int                     mg_init_critical_section      (void *p_crit);
+int                     mg_delete_critical_section    (void *p_crit);
 int                     mg_enter_critical_section     (void *p_crit);
 int                     mg_leave_critical_section     (void *p_crit);
 

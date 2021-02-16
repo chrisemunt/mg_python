@@ -3,7 +3,7 @@
    | mg_python: Python Extension for M/Cache/IRIS                             |
    | Author: Chris Munt cmunt@mgateway.com                                    |
    |                    chris.e.munt@gmail.com                                |
-   | Copyright (c) 2016-2020 M/Gateway Developments Ltd,                      |
+   | Copyright (c) 2016-2021 M/Gateway Developments Ltd,                      |
    | Surrey UK.                                                               |
    | All rights reserved.                                                     |
    |                                                                          |
@@ -42,6 +42,12 @@ Version 2.1.44 12 December 2019:
 Version 2.2.45 17 January 2020:
    Introduce option to connecto the database via its C API
    - mg_python.m_bind_server_api(0, dbtype, path, username, password, envvars, params)
+
+Version 2.3.46 15 February 2021:
+   Introduce support for M transaction processing: tstart, $tlevel, tcommit, trollback.
+   Introduce support for the M increment function.
+   Allow the DB server response timeout to be modified via the mg_python.m_set_timeout() function.
+   - mg_python.m_set_timeout(<dbhandle>,<timeout>)
 
 */
 
@@ -95,7 +101,7 @@ Version 2.2.45 17 January 2020:
 */
 
 
-#define MG_VERSION               "2.2.45"
+#define MG_VERSION               "2.3.46"
 
 #define MG_MAX_KEY               256
 #define MG_MAX_PAGE              256
@@ -385,6 +391,28 @@ static PyObject * ex_m_set_server(PyObject *self, PyObject *args)
 }
 
 
+/* v2.3.46 */
+static PyObject * ex_m_set_timeout(PyObject *self, PyObject *args)
+{
+   int result, phndle, timeout;
+   MGPAGE *p_page;
+
+   if (!PyArg_ParseTuple(args, "ii", &phndle, &timeout))
+      return NULL;
+
+   result = 0;
+
+   p_page = mg_ppage(phndle);
+
+   if (p_page && timeout >= 0) {
+      p_page->p_srv->timeout = timeout;
+      result = 1;
+   }
+
+   return Py_BuildValue("i", result);
+}
+
+
 static PyObject * ex_m_bind_server_api(PyObject *self, PyObject *args)
 {
    int result, phndle;
@@ -588,7 +616,6 @@ static PyObject * ex_ma_set(PyObject *self, PyObject *args)
    MG_MEMCHECK("Insufficient memory to process response", 0);
 
    mg_db_disconnect(p_page->p_srv, chndle, 1);
-
 
    if ((n = mg_get_error(p_page->p_srv, (char *) p_buf->p_buffer))) {
       MG_ERROR(p_buf->p_buffer + MG_RECV_HEAD);
@@ -1266,6 +1293,261 @@ static PyObject * ex_ma_previous(PyObject *self, PyObject *args)
 
    mg_buf_free(p_buf);
    return output;
+}
+
+/* v2.3.46 */
+static PyObject * ex_m_increment(PyObject *self, PyObject *args)
+{
+   MGBUF mgbuf, *p_buf;
+   int n, max;
+   int ifc[4];
+   int chndle;
+   MGPAGE *p_page;
+   MGVARGS vargs;
+   PyObject *output;
+
+   if ((max = mg_get_vargs(args, &vargs)) == -1)
+      return NULL;
+
+   p_page = mg_ppage(vargs.phndle);
+
+   p_buf = &mgbuf;
+   mg_buf_init(p_buf, MG_BUFSIZE, MG_BUFSIZE);
+
+   MG_FTRACE("m_increment");
+
+   n = mg_db_connect(p_page->p_srv, &chndle, 1);
+   if (!n) {
+      MG_ERROR(p_page->p_srv->error_mess);
+      mg_buf_free(p_buf);
+      return NULL;
+   }
+
+   mg_request_header(p_page->p_srv, p_buf, "I", MG_PRODUCT);
+
+   ifc[0] = 0;
+   ifc[1] = MG_TX_DATA;
+   mg_request_add(p_page->p_srv, chndle, p_buf, (unsigned char *) vargs.global, (int) strlen((char *) vargs.global), (short) ifc[0], (short) ifc[1]);
+
+   for (n = 0; n < max; n ++) {
+      ifc[0] = 0;
+      ifc[1] = MG_TX_DATA;
+      mg_request_add(p_page->p_srv, chndle, p_buf, (unsigned char *) vargs.cvars[n].ps, vargs.cvars[n].size, (short) ifc[0], (short) ifc[1]);
+   }
+
+   MG_MEMCHECK("Insufficient memory to process request", 1);
+   mg_db_send(p_page->p_srv, chndle, p_buf, 1);
+   mg_db_receive(p_page->p_srv, chndle, p_buf, MG_BUFSIZE, 0);
+   MG_MEMCHECK("Insufficient memory to process response", 0);
+   mg_db_disconnect(p_page->p_srv, chndle, 1);
+
+   if ((n = mg_get_error(p_page->p_srv, (char *) p_buf->p_buffer))) {
+      MG_ERROR(p_buf->p_buffer + MG_RECV_HEAD);
+      mg_buf_free(p_buf);
+      return NULL;
+   }
+
+   output = MG_MAKE_PYSTRINGN(p_buf->p_buffer + MG_RECV_HEAD, p_buf->data_size - MG_RECV_HEAD);
+   mg_buf_free(p_buf);
+   return output;
+}
+
+
+static PyObject * ex_m_tstart(PyObject *self, PyObject *args)
+{
+   MGBUF mgbuf, *p_buf;
+   int n;
+   int chndle;
+   MGPAGE *p_page;
+   MGVARGS vargs;
+   PyObject *output;
+
+   if (!PyArg_ParseTuple(args, "i", &(vargs.phndle))) {
+      return NULL;
+   }
+
+   p_page = mg_ppage(vargs.phndle);
+
+   p_buf = &mgbuf;
+   mg_buf_init(p_buf, MG_BUFSIZE, MG_BUFSIZE);
+
+   MG_FTRACE("m_tstart");
+
+   n = mg_db_connect(p_page->p_srv, &chndle, 1);
+   if (!n) {
+      MG_ERROR(p_page->p_srv->error_mess);
+      mg_buf_free(p_buf);
+      return NULL;
+   }
+
+   mg_request_header(p_page->p_srv, p_buf, "a", MG_PRODUCT);
+
+   mg_db_send(p_page->p_srv, chndle, p_buf, 1);
+   mg_db_receive(p_page->p_srv, chndle, p_buf, MG_BUFSIZE, 0);
+   MG_MEMCHECK("Insufficient memory to process response", 0);
+   mg_db_disconnect(p_page->p_srv, chndle, 1);
+
+   if ((n = mg_get_error(p_page->p_srv, (char *) p_buf->p_buffer))) {
+      MG_ERROR(p_buf->p_buffer + MG_RECV_HEAD);
+      mg_buf_free(p_buf);
+      return NULL;
+   }
+
+   output = MG_MAKE_PYSTRINGN(p_buf->p_buffer + MG_RECV_HEAD, p_buf->data_size - MG_RECV_HEAD);
+   mg_buf_free(p_buf);
+   return output;
+}
+
+
+static PyObject * ex_m_tlevel(PyObject *self, PyObject *args)
+{
+   MGBUF mgbuf, *p_buf;
+   int n;
+   int chndle;
+   MGPAGE *p_page;
+   MGVARGS vargs;
+   PyObject *output;
+
+   if (!PyArg_ParseTuple(args, "i", &(vargs.phndle))) {
+      return NULL;
+   }
+
+   p_page = mg_ppage(vargs.phndle);
+
+   p_buf = &mgbuf;
+   mg_buf_init(p_buf, MG_BUFSIZE, MG_BUFSIZE);
+
+   MG_FTRACE("m_tlevel");
+
+   n = mg_db_connect(p_page->p_srv, &chndle, 1);
+   if (!n) {
+      MG_ERROR(p_page->p_srv->error_mess);
+      mg_buf_free(p_buf);
+      return NULL;
+   }
+
+   mg_request_header(p_page->p_srv, p_buf, "b", MG_PRODUCT);
+
+   mg_db_send(p_page->p_srv, chndle, p_buf, 1);
+   mg_db_receive(p_page->p_srv, chndle, p_buf, MG_BUFSIZE, 0);
+   MG_MEMCHECK("Insufficient memory to process response", 0);
+   mg_db_disconnect(p_page->p_srv, chndle, 1);
+
+   if ((n = mg_get_error(p_page->p_srv, (char *) p_buf->p_buffer))) {
+      MG_ERROR(p_buf->p_buffer + MG_RECV_HEAD);
+      mg_buf_free(p_buf);
+      return NULL;
+   }
+
+   output = MG_MAKE_PYSTRINGN(p_buf->p_buffer + MG_RECV_HEAD, p_buf->data_size - MG_RECV_HEAD);
+   mg_buf_free(p_buf);
+   return output;
+}
+
+
+static PyObject * ex_m_tcommit(PyObject *self, PyObject *args)
+{
+   MGBUF mgbuf, *p_buf;
+   int n;
+   int chndle;
+   MGPAGE *p_page;
+   MGVARGS vargs;
+   PyObject *output;
+
+   if (!PyArg_ParseTuple(args, "i", &(vargs.phndle))) {
+      return NULL;
+   }
+
+   p_page = mg_ppage(vargs.phndle);
+
+   p_buf = &mgbuf;
+   mg_buf_init(p_buf, MG_BUFSIZE, MG_BUFSIZE);
+
+   MG_FTRACE("m_tcommit");
+
+   n = mg_db_connect(p_page->p_srv, &chndle, 1);
+   if (!n) {
+      MG_ERROR(p_page->p_srv->error_mess);
+      mg_buf_free(p_buf);
+      return NULL;
+   }
+
+   mg_request_header(p_page->p_srv, p_buf, "c", MG_PRODUCT);
+
+   mg_db_send(p_page->p_srv, chndle, p_buf, 1);
+   mg_db_receive(p_page->p_srv, chndle, p_buf, MG_BUFSIZE, 0);
+   MG_MEMCHECK("Insufficient memory to process response", 0);
+   mg_db_disconnect(p_page->p_srv, chndle, 1);
+
+   if ((n = mg_get_error(p_page->p_srv, (char *) p_buf->p_buffer))) {
+      MG_ERROR(p_buf->p_buffer + MG_RECV_HEAD);
+      mg_buf_free(p_buf);
+      return NULL;
+   }
+
+   output = MG_MAKE_PYSTRINGN(p_buf->p_buffer + MG_RECV_HEAD, p_buf->data_size - MG_RECV_HEAD);
+   mg_buf_free(p_buf);
+   return output;
+}
+
+
+static PyObject * ex_m_trollback(PyObject *self, PyObject *args)
+{
+   MGBUF mgbuf, *p_buf;
+   int n;
+   int chndle;
+   MGPAGE *p_page;
+   MGVARGS vargs;
+   PyObject *output;
+
+   if (!PyArg_ParseTuple(args, "i", &(vargs.phndle))) {
+      return NULL;
+   }
+
+   p_page = mg_ppage(vargs.phndle);
+
+   p_buf = &mgbuf;
+   mg_buf_init(p_buf, MG_BUFSIZE, MG_BUFSIZE);
+
+   MG_FTRACE("m_trollback");
+
+   n = mg_db_connect(p_page->p_srv, &chndle, 1);
+   if (!n) {
+      MG_ERROR(p_page->p_srv->error_mess);
+      mg_buf_free(p_buf);
+      return NULL;
+   }
+
+   mg_request_header(p_page->p_srv, p_buf, "d", MG_PRODUCT);
+
+   mg_db_send(p_page->p_srv, chndle, p_buf, 1);
+   mg_db_receive(p_page->p_srv, chndle, p_buf, MG_BUFSIZE, 0);
+   MG_MEMCHECK("Insufficient memory to process response", 0);
+   mg_db_disconnect(p_page->p_srv, chndle, 1);
+
+   if ((n = mg_get_error(p_page->p_srv, (char *) p_buf->p_buffer))) {
+      MG_ERROR(p_buf->p_buffer + MG_RECV_HEAD);
+      mg_buf_free(p_buf);
+      return NULL;
+   }
+
+   output = MG_MAKE_PYSTRINGN(p_buf->p_buffer + MG_RECV_HEAD, p_buf->data_size - MG_RECV_HEAD);
+   mg_buf_free(p_buf);
+   return output;
+}
+
+
+static PyObject * ex_m_sleep(PyObject *self, PyObject *args)
+{
+   int msecs;
+
+   if (!PyArg_ParseTuple(args, "i", &msecs))
+      return NULL;
+
+   mg_sleep((unsigned long) msecs);
+   msecs = 0;
+
+   return Py_BuildValue("i", msecs);
 }
 
 
@@ -3166,7 +3448,7 @@ static PyObject * ex_ma_local_sort(PyObject *self, PyObject *args)
 
    ifc[0] = 0;
    ifc[1] = MG_TX_DATA;
-   strcpy(buffer, "sort^%ZMGS");
+   strcpy(buffer, "sort^%zmgsis");
    mg_request_add(p_page->p_srv, chndle, p_buf, (unsigned char *) buffer, (int) strlen((char *) buffer), (short) ifc[0], (short) ifc[1]);
 
 
@@ -3280,6 +3562,7 @@ static PyMethodDef mg_python_methods[] = {
 	{"m_set_host", ex_m_set_host, METH_VARARGS, "m_set_host() doc string"},
 	{"m_set_uci", ex_m_set_uci, METH_VARARGS, "m_set_uci() doc string"},
 	{"m_set_server", ex_m_set_server, METH_VARARGS, "m_set_server() doc string"},
+	{"m_set_timeout", ex_m_set_timeout, METH_VARARGS, "m_set_timeout() doc string"},
 
 	{"m_bind_server_api", ex_m_bind_server_api, METH_VARARGS, "m_bind_server_api() doc string"},
 	{"m_release_server_api", ex_m_release_server_api, METH_VARARGS, "m_release_server_api() doc string"},
@@ -3302,6 +3585,14 @@ static PyMethodDef mg_python_methods[] = {
 	{"ma_order", ex_ma_order, METH_VARARGS, "ma_order() doc string"},
 	{"m_previous", ex_m_previous, METH_VARARGS, "m_previous() doc string"},
 	{"ma_previous", ex_ma_previous, METH_VARARGS, "ma_previous() doc string"},
+
+   /* v2.3.46 */
+	{"m_increment", ex_m_increment, METH_VARARGS, "m_increment() doc string"},
+	{"m_tstart", ex_m_tstart, METH_VARARGS, "m_tstart() doc string"},
+	{"m_tlevel", ex_m_tlevel, METH_VARARGS, "m_tlevel() doc string"},
+	{"m_tcommit", ex_m_tcommit, METH_VARARGS, "m_tcommit() doc string"},
+	{"m_trollback", ex_m_trollback, METH_VARARGS, "m_trollback() doc string"},
+	{"m_sleep", ex_m_sleep, METH_VARARGS, "m_sleep() doc string"},
 
 	{"ma_merge_to_db", ex_ma_merge_to_db, METH_VARARGS, "ma_merge_to_db() doc string"},
 	{"ma_merge_from_db", ex_ma_merge_from_db, METH_VARARGS, "ma_merge_from_db() doc string"},
@@ -3613,7 +3904,7 @@ int mg_set_list_item(PyObject * list, int index, PyObject * item)
    /* printf("set SET at %d\n", index); */
 
    PyList_SetItem(list, index, item);
-   Py_INCREF(list); /* cmtxxx */
+   Py_INCREF(list); /* v2.3.46 */
 
    return index;
 }
@@ -3671,7 +3962,7 @@ int mg_ppage_init(MGPAGE * p_page)
    p_page->p_srv->mem_error = 0;
    p_page->p_srv->mode = 0;
    p_page->p_srv->storage_mode = 0;
-   p_page->p_srv->timeout = 0;
+   p_page->p_srv->timeout = NETX_TIMEOUT;
    strcpy(p_page->p_srv->server, "");
    strcpy(p_page->p_srv->uci, "");
 
