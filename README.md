@@ -291,7 +291,7 @@ Before invoking database functionality,the following simple script can be used t
 
 This should return something like:
 
-       M/Gateway Developments Ltd. - mg_python: Python Gateway to M - Version 2.2.45
+       M/Gateway Developments Ltd. - mg_python: Python Gateway to M - Version 2.3.46
 
 Now consider the following database script:
 
@@ -389,7 +389,7 @@ M routine called 'math':
 
 Python invocation:
 
-      result = mg_python.m_function(0, "add^math", 2, 3);
+      result = mg_python.m_function(0, "add^math", 2, 3)
 
 
 ## <a name="TProcessing"></a> Transaction Processing
@@ -400,57 +400,57 @@ M DB Servers implement Transaction Processing by means of the methods described 
 
 ### Start a Transaction
 
-       result = mg_python.m_tstart(<dbhandle>);
+       result = mg_python.m_tstart(<dbhandle>)
 
 * On successful completion this method will return zero, or an error code on failure.
 
 Example:
 
-       result = mg_python.m_tstart(0);
+       result = mg_python.m_tstart(0)
 
 
 ### Determine the Transaction Level
 
-       result = mg_python.m_tlevel(<dbhandle>);
+       result = mg_python.m_tlevel(<dbhandle>)
 
 * Transactions can be nested and this method will return the level of nesting.  If no Transaction is active this method will return zero.  Otherwise a positive integer will be returned to represent the current depth of Transaction nesting.
 
 Example:
 
-       tlevel = mg_python.m_tlevel(0);
+       tlevel = mg_python.m_tlevel(0)
 
 
 ### Commit a Transaction
 
-       result = mg_python.m_tcommit(<dbhandle>);
+       result = mg_python.m_tcommit(<dbhandle>)
 
 * On successful completion this method will return zero, or an error code on failure.
 
 Example:
 
-       result = mg_python.m_tcommit(0);
+       result = mg_python.m_tcommit(0)
 
 
 ### Rollback a Transaction
 
-       result = mg_python.m_trollback(<dbhandle>);
+       result = mg_python.m_trollback(<dbhandle>)
 
 * On successful completion this method will return zero, or an error code on failure.
 
 Example:
 
-       result = mg_python.m_trollback(0);
+       result = mg_python.m_trollback(0)
 
 
 ## <a name="DBClasses"> Direct access to InterSystems classes (IRIS and Cache)
 
 ### Invocation of a ClassMethod
 
-       result = mg_python.m_classmethod(<dbhandle>, <class_name>, <classmethod_name>, <parameters>);
+       result = mg_python.m_classmethod(<dbhandle>, <class_name>, <classmethod_name>, <parameters>)
       
 Example (Encode a date to internal storage format):
 
-        result = mg_python.m_classmethod("%Library.Date", "DisplayToLogical", "10/10/2019");
+       result = mg_python.m_classmethod("%Library.Date", "DisplayToLogical", "10/10/2019")
 
 
 ## <a name="License"></a> License
