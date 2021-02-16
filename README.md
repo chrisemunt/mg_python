@@ -3,9 +3,9 @@
 A Python Extension for InterSystems **Cache/IRIS** and **YottaDB**.
 
 Chris Munt <cmunt@mgateway.com>  
-20 January 2021, M/Gateway Developments Ltd [http://www.mgateway.com](http://www.mgateway.com)
+15 February 2021, M/Gateway Developments Ltd [http://www.mgateway.com](http://www.mgateway.com)
 
-* Current Release: Version: 2.2; Revision 45a.
+* Current Release: Version: 2.3; Revision 46.
 * Two connectivity models to the InterSystems or YottaDB database are provided: High performance via the local database API or network based.
 * [Release Notes](#RelNotes) can be found at the end of this document.
 
@@ -18,6 +18,7 @@ Contents
 * [Connecting to the database](#Connect)
 * [Invocation of database commands](#DBCommands)
 * [Invocation of database functions](#DBFunctions)
+* [Transaction Processing](#TProcessing)
 * [Direct access to InterSystems classes (IRIS and Cache)](#DBClasses)
 * [License](#License)
 
@@ -44,7 +45,7 @@ InterSystems **Cache/IRIS** or **YottaDB** (or similar M database):
 There are three parts to **mg_python** installation and configuration.
 
 * The Python extension (**mg_python.pyd**).
-* The database (or server) side code: **zmgsi**
+* The DB Superserver: the **%zmgsi** routines.
 * A network configuration to bind the former two elements together.
 
 ### Building the mg_python extension
@@ -81,9 +82,9 @@ Windows:
        python setup_win.py install
 
 
-### Installing the M support routines
+### Installing the DB Superserver
 
-The M support routines are required for:
+The DB Superserver is required for:
 
 * Network based access to databases.
 
@@ -100,7 +101,7 @@ Change to your development Namespace and check the installation:
        do ^%zmgsi
 
        M/Gateway Developments Ltd - Service Integration Gateway
-       Version: 3.6; Revision 15 (6 November 2020)
+       Version: 4.0; Revision 16 (11 February 2021)
 
 
 #### Installation for YottaDB
@@ -129,78 +130,38 @@ Link all the **zmgsi** routines and check the installation:
        do ^%zmgsi
 
        M/Gateway Developments Ltd - Service Integration Gateway
-       Version: 3.6; Revision 15 (6 November 2020)
+       Version: 4.0; Revision 16 (11 February 2021)
 
 Note that the version of **zmgsi** is successfully displayed.
 
+Finally, add the following lines to the interface file (**zmgsi.ci** in the example used in the db.open() method).
 
-### Setting up the network service (for network based connectivity only)
+       sqlemg: ydb_string_t * sqlemg^%zmgsis(I:ydb_string_t*, I:ydb_string_t *, I:ydb_string_t *)
+       sqlrow: ydb_string_t * sqlrow^%zmgsis(I:ydb_string_t*, I:ydb_string_t *, I:ydb_string_t *)
+       sqldel: ydb_string_t * sqldel^%zmgsis(I:ydb_string_t*, I:ydb_string_t *)
+       ifc_zmgsis: ydb_string_t * ifc^%zmgsis(I:ydb_string_t*, I:ydb_string_t *, I:ydb_string_t*)
+
+A copy of this file can be downloaded from the **/unix** directory of the  **mgsi** GitHub repository [here](https://github.com/chrisemunt/mgsi)
+
+
+### Starting the DB Superserver
 
 The default TCP server port for **zmgsi** is **7041**.  If you wish to use an alternative port then modify the following instructions accordingly.
 
-Python code using the **mg\_python** functions will, by default, expect the database server to be listening on port **7041** of the local server (localhost).  However, **mg\_python** provides the functionality to modify these default settings at run-time.  It is not necessary for the Python installation to reside on the same host as the database server.
+* For InterSystems DB servers the concurrent TCP service should be started in the **%SYS** Namespace.
 
-#### InterSystems Cache/IRIS
-
-Start the Cache/IRIS-hosted concurrent TCP service in the Manager UCI:
+Start the DB Superserver using the following command:
 
        do start^%zmgsi(0) 
 
 To use a server TCP port other than 7041, specify it in the start-up command (as opposed to using zero to indicate the default port of 7041).
 
-#### YottaDB
+* For YottaDB, as an alternative to starting the DB Superserver from the command prompt, Superserver processes can be started via the **xinetd** daemon.  Instructions for configuring this option can be found in the **mgsi** repository [here](https://github.com/chrisemunt/mgsi)
 
-Network connectivity to **YottaDB** is managed via the **xinetd** service.  First create the following launch script (called **zmgsi\_ydb** here):
-
-       /usr/local/lib/yottadb/r130/zmgsi_ydb
-
-Content:
-
-       #!/bin/bash
-       cd /usr/local/lib/yottadb/r130
-       export ydb_dir=/root/.yottadb
-       export ydb_dist=/usr/local/lib/yottadb/r130
-       export ydb_routines="/root/.yottadb/r1.30_x86_64/o*(/root/.yottadb/r1.30_x86_64/r /root/.yottadb/r) /usr/local/lib/yottadb/r130/libyottadbutil.so"
-       export ydb_gbldir="/root/.yottadb/r1.30_x86_64/g/yottadb.gld"
-       $ydb_dist/ydb -r xinetd^%zmgsis
-
-Note that you should, if necessary, modify the permissions on this file so that it is executable.  For example:
-
-       chmod a=rx /usr/local/lib/yottadb/r130/zmgsi_ydb
-
-Create the **xinetd** script (called **zmgsi\_xinetd** here): 
-
-       /etc/xinetd.d/zmgsi_xinetd
-
-Content:
-
-       service zmgsi_xinetd
-       {
-            disable         = no
-            type            = UNLISTED
-            port            = 7041
-            socket_type     = stream
-            wait            = no
-            user            = root
-            server          = /usr/local/lib/yottadb/r130/zmgsi_ydb
-       }
-
-* Note: sample copies of **zmgsi\_xinetd** and **zmgsi\_ydb** are included in the **/unix** directory of the **mgsi** GitHub repository [here](https://github.com/chrisemunt/mgsi).
-
-Edit the services file:
-
-       /etc/services
-
-Add the following line to this file:
-
-       zmgsi_xinetd          7041/tcp                        # zmgsi
-
-Finally restart the **xinetd** service:
-
-       /etc/init.d/xinetd restart
+Python code using the **mg\_python** functions will, by default, expect the database server to be listening on port **7041** of the local server (localhost).  However, **mg\_python** provides the functionality to modify these default settings at run-time.  It is not necessary for the Python installation to reside on the same host as the database server.
 
 
-### Resources used by zmgsi
+### Resources used by the DB Superserver (%zmgsi)
 
 The **zmgsi** server-side code will write to the following global:
 
@@ -253,7 +214,7 @@ Where:
 
 * dbhandle: Current server handle.
 * namespace: Namespace.
-* dbtype: Database type (‘Cache’ or ‘IRIS’).
+* dbtype: Database type ('Cache' or 'IRIS').
 * path: Path to database manager directory.
 * username: Database username.
 * password: Database password.
@@ -404,6 +365,16 @@ Example:
           print(key, " = ", mg_python.m_get(0, "^Person", key))
           key  = mg_python.m_previous(0, "^Person", key)
 
+### Increment the value of a global node
+
+       result = mg_python.m_increment(<dbhandle>, <global>, <key>, <increment_value>)
+      
+Example:
+
+       result = mg_python.m_increment(0, "^Global", "counter", 1)
+
+This will increment the value of global node ^Global("counter"), by 1 and return the new value.
+ 
 
 ## <a name="DBFunctions"> Invocation of database functions
 
@@ -419,6 +390,56 @@ M routine called 'math':
 Python invocation:
 
       result = mg_python.m_function(0, "add^math", 2, 3);
+
+
+## <a name="TProcessing"></a> Transaction Processing
+
+M DB Servers implement Transaction Processing by means of the methods described in this section.
+
+* With YottaDB, these methods are only available over network based connectivity to the DB Server.
+
+### Start a Transaction
+
+       result = mg_python.m_tstart(<dbhandle>);
+
+* On successful completion this method will return zero, or an error code on failure.
+
+Example:
+
+       result = mg_python.m_tstart(0);
+
+
+### Determine the Transaction Level
+
+       result = mg_python.m_tlevel(<dbhandle>);
+
+* Transactions can be nested and this method will return the level of nesting.  If no Transaction is active this method will return zero.  Otherwise a positive integer will be returned to represent the current depth of Transaction nesting.
+
+Example:
+
+       tlevel = mg_python.m_tlevel(0);
+
+
+### Commit a Transaction
+
+       result = mg_python.m_tcommit(<dbhandle>);
+
+* On successful completion this method will return zero, or an error code on failure.
+
+Example:
+
+       result = mg_python.m_tcommit(0);
+
+
+### Rollback a Transaction
+
+       result = mg_python.m_trollback(<dbhandle>);
+
+* On successful completion this method will return zero, or an error code on failure.
+
+Example:
+
+       result = mg_python.m_trollback(0);
 
 
 ## <a name="DBClasses"> Direct access to InterSystems classes (IRIS and Cache)
@@ -462,3 +483,13 @@ Unless required by applicable law or agreed to in writing, software distributed 
 ### v2.2.45a (20 January 2021)
 
 * Restructure and update the documentation.
+
+### v2.3.46 (15 February 2021)
+
+* Introduce support for M transaction processing: tstart, $tlevel, tcommit, trollback.
+	* Available with DB Superserver v4 and later. 
+* Introduce support for the M increment function.
+* Allow the DB server response timeout to be modified via the mg\_python.m\_set\_timeout() function.
+	* mg_python.m\_set\_timeout(<dbhandle>,<timeout>)
+
+
