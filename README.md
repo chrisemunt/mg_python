@@ -490,6 +490,6 @@ Unless required by applicable law or agreed to in writing, software distributed 
 	* Available with DB Superserver v4 and later. 
 * Introduce support for the M increment function.
 * Allow the DB server response timeout to be modified via the mg\_python.m\_set\_timeout() function.
-	* mg_python.m\_set\_timeout(<dbhandle>,<timeout>)
+	* mg_python.m\_set\_timeout([dbhandle],[timeout])
 
 
