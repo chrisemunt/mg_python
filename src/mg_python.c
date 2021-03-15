@@ -49,6 +49,10 @@ Version 2.3.46 15 February 2021:
    Allow the DB server response timeout to be modified via the mg_python.m_set_timeout() function.
    - mg_python.m_set_timeout(<dbhandle>,<timeout>)
 
+Version 2.3.47 14 March 2021:
+   Introduce support for YottaDB Transaction Processing over API based connectivity.
+   - This functionality was previously only available over network-based connectivity to YottaDB.
+
 */
 
 /*
@@ -101,7 +105,7 @@ Version 2.3.46 15 February 2021:
 */
 
 
-#define MG_VERSION               "2.3.46"
+#define MG_VERSION               "2.3.47"
 
 #define MG_MAX_KEY               256
 #define MG_MAX_PAGE              256
