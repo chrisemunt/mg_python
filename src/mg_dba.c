@@ -61,6 +61,10 @@ Version 1.2.8 15 February 2021:
 Version 1.2.9 14 March 2021:
    Introduce support for YottaDB Transaction Processing over API based connectivity.
    - This functionality was previously only available over network-based connectivity to YottaDB.
+
+Version 1.3.10 5 April 2021:
+   Introduce improved support for InterSystems Objects for the standard (PHP/Python/Ruby) connectivity protocol.
+
 */
 
 
@@ -2605,6 +2609,7 @@ int isc_open(DBXMETH *pmeth)
 
    if (!pcon->p_isc_so->loaded) {
       rc = isc_load_library(pcon);
+
       sprintf((char *) pmeth->output_val.svalue.buf_addr, "%d", rc);
       pmeth->output_val.svalue.len_used = (unsigned int) strlen((char *) pmeth->output_val.svalue.buf_addr);
       if (rc != CACHE_SUCCESS) {
@@ -7477,12 +7482,32 @@ int mg_bind_server_api(MGSRV *p_srv, short context)
 
    if (!p_srv->pcon[chndle]) {
       p_srv->pcon[chndle] = (DBXCON *) mg_malloc(sizeof(DBXCON), 0);
+      if (!p_srv->pcon[chndle]) { /* 1.3.10 */
+         strcpy(p_srv->error_mess, "Unable to allocate memory for the connection");
+         return 0;
+      }
       memset(p_srv->pcon[chndle], 0, sizeof(DBXCON));
       p_srv->pcon[chndle]->chndle = chndle;
 
       pmeth = (DBXMETH *) mg_malloc(sizeof(DBXMETH), 0);
+      if (!pmeth) { /* 1.3.10 */
+         mg_free((void *) p_srv->pcon[chndle], 0);
+         strcpy(p_srv->error_mess, "Unable to allocate memory for the connection");
+         return 0;
+      }
       memset(pmeth, 0, sizeof(DBXMETH));
       p_srv->pcon[chndle]->pmeth_base = (void *) pmeth;
+
+      /* v1.3.10 */
+      pmeth->output_val.svalue.buf_addr = (char *) mg_malloc(sizeof(char) * DBX_BUFFER, 0);
+      if (!pmeth->output_val.svalue.buf_addr) {
+         mg_free((void *) p_srv->pcon[chndle], 0);
+         strcpy(p_srv->error_mess, "Unable to allocate memory for the connection");
+         return 0;
+      }
+      pmeth->output_val.svalue.buf_addr[0] = '\0';
+      pmeth->output_val.svalue.len_alloc = DBX_BUFFER;
+      pmeth->output_val.svalue.len_used = 0;
    }
 
    pcon = p_srv->pcon[chndle];
@@ -7595,12 +7620,14 @@ int mg_release_server_api(MGSRV *p_srv, short context)
 {
    int result, chndle, rc, rc1;
    char buffer[256];
+   DBXMETH *pmeth;
    DBXCON *pcon;
 
    result = 1;
    chndle = 0;
 
    pcon = p_srv->pcon[chndle];
+   pmeth = (DBXMETH *) pcon->pmeth_base;
 
    if (pcon->dbtype == DBX_DBTYPE_YOTTADB) {
       if (pcon->p_ydb_so->loaded) {
@@ -7661,6 +7688,13 @@ int mg_release_server_api(MGSRV *p_srv, short context)
       strcpy(pcon->p_isc_so->libnam, "");
    }
 
+   if (pmeth) { /* 1.3.10 */
+      if (pmeth->output_val.svalue.buf_addr) {
+         mg_free((void *) pmeth->output_val.svalue.buf_addr, 0);
+      }
+      mg_free((void *) pmeth, 0);
+      pcon->pmeth_base = NULL;
+   }
    return result;
 
 }

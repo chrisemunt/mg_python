@@ -53,6 +53,9 @@ Version 2.3.47 14 March 2021:
    Introduce support for YottaDB Transaction Processing over API based connectivity.
    - This functionality was previously only available over network-based connectivity to YottaDB.
 
+Version 2.4.48 5 April 2021:
+   Introduce improved support for InterSystems Objects for the standard (PHP/Python/Ruby) connectivity protocol.
+
 */
 
 /*
@@ -105,7 +108,7 @@ Version 2.3.47 14 March 2021:
 */
 
 
-#define MG_VERSION               "2.3.47"
+#define MG_VERSION               "2.4.48"
 
 #define MG_MAX_KEY               256
 #define MG_MAX_PAGE              256
@@ -127,6 +130,7 @@ Version 2.3.47 14 March 2021:
 /* include standard header */
 
 #include <Python.h>
+#include <structmember.h>
 
 #define MG_DBA_EMBEDDED          1
 #include "mg_dbasys.h"
@@ -199,6 +203,17 @@ typedef struct tagMGPAGE {
 } MGPAGE, *LPMGPAGE;
 
 
+/* v2.4.48 */
+typedef struct {
+   PyObject_HEAD
+   /* Type-specific fields go here. */
+   PyObject *class_name; /* class name */
+   int oref;
+   int phndle;
+   char cname[64];
+} MClassObject;
+
+
 static MGPAGE gpage;
 static MGPAGE *tp_page[MG_MAX_PAGE] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 
@@ -207,18 +222,58 @@ static char minit[256]           = {'\0'};
 static char *mg_empty_string     = "";
 
 
+static void             ex_mclass_dealloc          (MClassObject *self);
+static PyObject *       ex_mclass_new              (PyTypeObject *type, PyObject *args, PyObject *kwds);
+static int              ex_mclass_init             (MClassObject *self, PyObject *args, PyObject *kwds);
+static PyObject *       ex_mclass_method           (MClassObject *self, PyObject *args);
+static PyObject *       ex_mclass_getproperty      (MClassObject *self, PyObject *args);
+static PyObject *       ex_mclass_setproperty      (MClassObject *self, PyObject *args);
+static PyObject *       ex_mclass_close            (MClassObject *self, PyObject *args);
+
 PyObject *              mg_make_pystringn          (char *str, int strlen);
 int                     mg_type                    (PyObject *item);
 int                     mg_get_integer             (PyObject *item);
 double                  mg_get_float               (PyObject *item);
 char *                  mg_get_string              (PyObject *item, PyObject **item_tmp, int *size);
 int                     mg_get_keys                (PyObject *keys, MGSTR *ckeys, PyObject **keys_tmp, char *record);
-int                     mg_get_vargs               (PyObject *args, MGVARGS *pvargs);
+int                     mg_get_vargs               (PyObject *args, MGVARGS *pvargs, int context);
 int                     mg_set_list_item           (PyObject * list, int index, PyObject * item);
 int                     mg_kill_list               (PyObject * list);
 int                     mg_kill_list_item          (PyObject * list, int index);
 MGPAGE *                mg_ppage                   (int phndle);
 int                     mg_ppage_init              (MGPAGE * p_page);
+
+
+static PyMemberDef mclass_members[] = {
+   {"class_name", T_OBJECT_EX, offsetof(MClassObject, class_name), 0, "InterSystems Class Name"},
+   {"oref", T_INT, offsetof(MClassObject, oref), 0, "InterSystems Object Reference"},
+   {"phndle", T_INT, offsetof(MClassObject, phndle), 0, "InterSystems Database Handle"},
+   {NULL}  /* Sentinel */
+};
+
+
+static PyMethodDef mclass_methods[] = {
+   {"method", (PyCFunction) ex_mclass_method, METH_VARARGS, "Invoke InterSystems class method"},
+   {"getproperty", (PyCFunction) ex_mclass_getproperty, METH_VARARGS, "Retrieve InterSystems class property"},
+   {"setproperty", (PyCFunction) ex_mclass_setproperty, METH_VARARGS, "Set InterSystems class property"},
+   {"close", (PyCFunction) ex_mclass_close, METH_VARARGS, "Close InterSystems class property"},
+   {NULL}  /* Sentinel */
+};
+
+
+static PyTypeObject MClassType = {
+   PyVarObject_HEAD_INIT(NULL, 0)
+   .tp_name = "mg_python.mclass",
+   .tp_doc = "InterSystems Classes",
+   .tp_basicsize = sizeof(MClassObject),
+   .tp_itemsize = 0,
+   .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+   .tp_new = ex_mclass_new,
+   .tp_init = (initproc) ex_mclass_init,
+   .tp_dealloc = (destructor) ex_mclass_dealloc,
+   .tp_members = mclass_members,
+   .tp_methods = mclass_methods,
+};
 
 
 
@@ -502,7 +557,7 @@ static PyObject * ex_m_set(PyObject *self, PyObject *args)
    MGVARGS vargs;
    PyObject *output;
 
-   if ((max = mg_get_vargs(args, &vargs)) == -1)
+   if ((max = mg_get_vargs(args, &vargs, 0)) == -1)
       return NULL;
 
    p_page = mg_ppage(vargs.phndle);
@@ -643,7 +698,7 @@ static PyObject * ex_m_get(PyObject *self, PyObject *args)
    MGVARGS vargs;
    PyObject *output;
 
-   if ((max = mg_get_vargs(args, &vargs)) == -1)
+   if ((max = mg_get_vargs(args, &vargs, 0)) == -1)
       return NULL;
 
    p_page = mg_ppage(vargs.phndle);
@@ -777,7 +832,7 @@ static PyObject * ex_m_kill(PyObject *self, PyObject *args)
    MGVARGS vargs;
    PyObject *output;
 
-   if ((max = mg_get_vargs(args, &vargs)) == -1)
+   if ((max = mg_get_vargs(args, &vargs, 0)) == -1)
       return NULL;
 
    p_page = mg_ppage(vargs.phndle);
@@ -909,7 +964,7 @@ static PyObject * ex_m_data(PyObject *self, PyObject *args)
    MGVARGS vargs;
    PyObject *output;
 
-   if ((max = mg_get_vargs(args, &vargs)) == -1)
+   if ((max = mg_get_vargs(args, &vargs, 0)) == -1)
       return NULL;
 
    p_page = mg_ppage(vargs.phndle);
@@ -1040,7 +1095,7 @@ static PyObject * ex_m_order(PyObject *self, PyObject *args)
    MGVARGS vargs;
    PyObject *output;
 
-   if ((max = mg_get_vargs(args, &vargs)) == -1)
+   if ((max = mg_get_vargs(args, &vargs, 0)) == -1)
       return NULL;
 
    p_page = mg_ppage(vargs.phndle);
@@ -1176,7 +1231,7 @@ static PyObject * ex_m_previous(PyObject *self, PyObject *args)
    MGVARGS vargs;
    PyObject *output;
 
-   if ((max = mg_get_vargs(args, &vargs)) == -1)
+   if ((max = mg_get_vargs(args, &vargs, 0)) == -1)
       return NULL;
 
    p_page = mg_ppage(vargs.phndle);
@@ -1310,7 +1365,7 @@ static PyObject * ex_m_increment(PyObject *self, PyObject *args)
    MGVARGS vargs;
    PyObject *output;
 
-   if ((max = mg_get_vargs(args, &vargs)) == -1)
+   if ((max = mg_get_vargs(args, &vargs, 0)) == -1)
       return NULL;
 
    p_page = mg_ppage(vargs.phndle);
@@ -1828,7 +1883,7 @@ static PyObject * ex_m_function(PyObject *self, PyObject *args)
    MGVARGS vargs;
    PyObject *output;
 
-   if ((max = mg_get_vargs(args, &vargs)) == -1)
+   if ((max = mg_get_vargs(args, &vargs, 0)) == -1)
       return NULL;
 
    p_page = mg_ppage(vargs.phndle);
@@ -2145,7 +2200,7 @@ static PyObject * ex_m_classmethod(PyObject *self, PyObject *args)
    MGVARGS vargs;
    PyObject *output;
 
-   if ((max = mg_get_vargs(args, &vargs)) == -1)
+   if ((max = mg_get_vargs(args, &vargs, 0)) == -1)
       return NULL;
 
    p_page = mg_ppage(vargs.phndle);
@@ -2190,11 +2245,27 @@ static PyObject * ex_m_classmethod(PyObject *self, PyObject *args)
       return NULL;
    }
 
+   if (!strncmp((char *) p_buf->p_buffer + 5, "co", 2)) { /* v2.4.48 */
+      int oref;
+
+      p_buf->p_buffer[p_buf->data_size] = '\0';
+      oref = (int) strtol(p_buf->p_buffer + MG_RECV_HEAD, NULL, 10);
+      PyObject *argList = Py_BuildValue("sii", "mclass", oref, vargs.phndle);
+
+      /* Call the class object. */
+      PyObject *obj = PyObject_CallObject((PyObject *) &MClassType, argList);
+
+      /* Release the argument list. */
+      Py_DECREF(argList);
+
+      return obj;
+   }
+
+
    output = MG_MAKE_PYSTRINGN(p_buf->p_buffer + MG_RECV_HEAD, p_buf->data_size - MG_RECV_HEAD);
    mg_buf_free(p_buf);
    return output;
 }
-
 
 
 static PyObject * ex_ma_classmethod(PyObject *self, PyObject *args)
@@ -2439,6 +2510,305 @@ static PyObject * ex_ma_classmethod(PyObject *self, PyObject *args)
    output = MG_MAKE_PYSTRINGN(p_buf->p_buffer + MG_RECV_HEAD, p_buf->data_size - MG_RECV_HEAD);
    mg_buf_free(p_buf);
    return output;
+}
+
+
+/* v2.4.48 */
+static void ex_mclass_dealloc(MClassObject *self)
+{
+    Py_XDECREF(self->class_name);
+    Py_TYPE(self)->tp_free((PyObject *) self);
+}
+
+
+static PyObject * ex_mclass_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    MClassObject *self;
+    self = (MClassObject *) type->tp_alloc(type, 0);
+    if (self != NULL) {
+        self->class_name = PyUnicode_FromString("");
+        if (self->class_name == NULL) {
+            Py_DECREF(self);
+            return NULL;
+        }
+        self->oref = 0;
+    }
+    return (PyObject *) self;
+}
+
+
+static int ex_mclass_init(MClassObject *self, PyObject *args, PyObject *kwds)
+{
+    static char *kwlist[] = {"class_name", "oref", "phndle", NULL};
+    PyObject *class_name = NULL, *tmp;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|Oii", kwlist, &class_name, &self->oref, &self->phndle))
+        return -1;
+
+    if (class_name) {
+        tmp = self->class_name;
+        Py_INCREF(class_name);
+        self->class_name = class_name;
+        Py_XDECREF(tmp);
+    }
+
+    return 0;
+}
+
+
+static PyObject * ex_mclass_method(MClassObject *self, PyObject *args)
+{
+   MGBUF mgbuf, *p_buf;
+   int n, max;
+   int ifc[4];
+   int chndle;
+   char buffer[32];
+   MGPAGE *p_page;
+   MGVARGS vargs;
+   PyObject *output;
+
+   if (!self)
+      return NULL;
+   if ((max = mg_get_vargs(args, &vargs, 1)) == -1)
+      return NULL;
+
+   vargs.phndle = self->phndle;
+   p_page = mg_ppage(vargs.phndle);
+
+   p_buf = &mgbuf;
+   mg_buf_init(p_buf, MG_BUFSIZE, MG_BUFSIZE);
+
+   MG_FTRACE("mclass_method");
+
+   n = mg_db_connect(p_page->p_srv, &chndle, 1);
+   if (!n) {
+      MG_ERROR(p_page->p_srv->error_mess);
+      mg_buf_free(p_buf);
+      return NULL;
+   }
+
+   mg_request_header(p_page->p_srv, p_buf, "j", MG_PRODUCT);
+
+   sprintf(buffer, "%d", self->oref);
+   ifc[0] = 0;
+   ifc[1] = MG_TX_DATA;
+   mg_request_add(p_page->p_srv, chndle, p_buf, (unsigned char *) buffer, (int) strlen((char *) buffer), (short) ifc[0], (short) ifc[1]);
+
+   for (n = 0; n < max; n ++) {
+      ifc[0] = 0;
+      ifc[1] = MG_TX_DATA;
+      mg_request_add(p_page->p_srv, chndle, p_buf, (unsigned char *) vargs.cvars[n].ps, vargs.cvars[n].size, (short) ifc[0], (short) ifc[1]);
+   }
+
+   MG_MEMCHECK("Insufficient memory to process request", 1);
+
+   mg_db_send(p_page->p_srv, chndle, p_buf, 1);
+
+   mg_db_receive(p_page->p_srv, chndle, p_buf, MG_BUFSIZE, 0);
+
+   MG_MEMCHECK("Insufficient memory to process response", 0);
+
+   mg_db_disconnect(p_page->p_srv, chndle, 1);
+
+   if ((n = mg_get_error(p_page->p_srv, (char *) p_buf->p_buffer))) {
+      MG_ERROR(p_buf->p_buffer + MG_RECV_HEAD);
+      mg_buf_free(p_buf);
+      return NULL;
+   }
+
+   if (!strncmp((char *) p_buf->p_buffer + 5, "co", 2)) { /* v2.4.48 */
+      int oref;
+
+      p_buf->p_buffer[p_buf->data_size] = '\0';
+      oref = (int) strtol(p_buf->p_buffer + MG_RECV_HEAD, NULL, 10);
+      PyObject *argList = Py_BuildValue("sii", "mclass", oref, vargs.phndle);
+
+      /* Call the class object. */
+      PyObject *obj = PyObject_CallObject((PyObject *) &MClassType, argList);
+
+      /* Release the argument list. */
+      Py_DECREF(argList);
+
+      return obj;
+   }
+
+   output = MG_MAKE_PYSTRINGN(p_buf->p_buffer + MG_RECV_HEAD, p_buf->data_size - MG_RECV_HEAD);
+   mg_buf_free(p_buf);
+   return output;
+}
+
+
+static PyObject * ex_mclass_getproperty(MClassObject *self, PyObject *args)
+{
+   MGBUF mgbuf, *p_buf;
+   int n, max;
+   int ifc[4];
+   int chndle;
+   char buffer[32];
+   MGPAGE *p_page;
+   MGVARGS vargs;
+   PyObject *output;
+
+   if (!self)
+      return NULL;
+   if ((max = mg_get_vargs(args, &vargs, 1)) == -1)
+      return NULL;
+
+   vargs.phndle = self->phndle;
+   p_page = mg_ppage(vargs.phndle);
+
+   p_buf = &mgbuf;
+   mg_buf_init(p_buf, MG_BUFSIZE, MG_BUFSIZE);
+
+   MG_FTRACE("mclass_getproperty");
+
+   n = mg_db_connect(p_page->p_srv, &chndle, 1);
+   if (!n) {
+      MG_ERROR(p_page->p_srv->error_mess);
+      mg_buf_free(p_buf);
+      return NULL;
+   }
+
+   mg_request_header(p_page->p_srv, p_buf, "h", MG_PRODUCT);
+
+   sprintf(buffer, "%d", self->oref);
+   ifc[0] = 0;
+   ifc[1] = MG_TX_DATA;
+   mg_request_add(p_page->p_srv, chndle, p_buf, (unsigned char *) buffer, (int) strlen((char *) buffer), (short) ifc[0], (short) ifc[1]);
+
+   for (n = 0; n < max; n ++) {
+      ifc[0] = 0;
+      ifc[1] = MG_TX_DATA;
+      mg_request_add(p_page->p_srv, chndle, p_buf, (unsigned char *) vargs.cvars[n].ps, vargs.cvars[n].size, (short) ifc[0], (short) ifc[1]);
+   }
+
+   MG_MEMCHECK("Insufficient memory to process request", 1);
+
+   mg_db_send(p_page->p_srv, chndle, p_buf, 1);
+
+   mg_db_receive(p_page->p_srv, chndle, p_buf, MG_BUFSIZE, 0);
+
+   MG_MEMCHECK("Insufficient memory to process response", 0);
+
+   mg_db_disconnect(p_page->p_srv, chndle, 1);
+
+   if ((n = mg_get_error(p_page->p_srv, (char *) p_buf->p_buffer))) {
+      MG_ERROR(p_buf->p_buffer + MG_RECV_HEAD);
+      mg_buf_free(p_buf);
+      return NULL;
+   }
+
+   if (!strncmp((char *) p_buf->p_buffer + 5, "co", 2)) { /* v2.4.48 */
+      int oref;
+
+      p_buf->p_buffer[p_buf->data_size] = '\0';
+      oref = (int) strtol(p_buf->p_buffer + MG_RECV_HEAD, NULL, 10);
+      PyObject *argList = Py_BuildValue("sii", "mclass", oref, vargs.phndle);
+
+      /* Call the class object. */
+      PyObject *obj = PyObject_CallObject((PyObject *) &MClassType, argList);
+
+      /* Release the argument list. */
+      Py_DECREF(argList);
+
+      return obj;
+   }
+
+   output = MG_MAKE_PYSTRINGN(p_buf->p_buffer + MG_RECV_HEAD, p_buf->data_size - MG_RECV_HEAD);
+   mg_buf_free(p_buf);
+   return output;
+}
+
+
+static PyObject * ex_mclass_setproperty(MClassObject *self, PyObject *args)
+{
+   MGBUF mgbuf, *p_buf;
+   int n, max;
+   int ifc[4];
+   int chndle;
+   char buffer[32];
+   MGPAGE *p_page;
+   MGVARGS vargs;
+   PyObject *output;
+
+   if (!self)
+      return NULL;
+   if ((max = mg_get_vargs(args, &vargs, 1)) == -1)
+      return NULL;
+
+   vargs.phndle = self->phndle;
+   p_page = mg_ppage(vargs.phndle);
+
+   p_buf = &mgbuf;
+   mg_buf_init(p_buf, MG_BUFSIZE, MG_BUFSIZE);
+
+   MG_FTRACE("mclass_setproperty");
+
+   n = mg_db_connect(p_page->p_srv, &chndle, 1);
+   if (!n) {
+      MG_ERROR(p_page->p_srv->error_mess);
+      mg_buf_free(p_buf);
+      return NULL;
+   }
+
+   mg_request_header(p_page->p_srv, p_buf, "i", MG_PRODUCT);
+
+   sprintf(buffer, "%d", self->oref);
+   ifc[0] = 0;
+   ifc[1] = MG_TX_DATA;
+   mg_request_add(p_page->p_srv, chndle, p_buf, (unsigned char *) buffer, (int) strlen((char *) buffer), (short) ifc[0], (short) ifc[1]);
+
+   for (n = 0; n < max; n ++) {
+      ifc[0] = 0;
+      ifc[1] = MG_TX_DATA;
+      mg_request_add(p_page->p_srv, chndle, p_buf, (unsigned char *) vargs.cvars[n].ps, vargs.cvars[n].size, (short) ifc[0], (short) ifc[1]);
+   }
+
+   MG_MEMCHECK("Insufficient memory to process request", 1);
+
+   mg_db_send(p_page->p_srv, chndle, p_buf, 1);
+
+   mg_db_receive(p_page->p_srv, chndle, p_buf, MG_BUFSIZE, 0);
+
+   MG_MEMCHECK("Insufficient memory to process response", 0);
+
+   mg_db_disconnect(p_page->p_srv, chndle, 1);
+
+   if ((n = mg_get_error(p_page->p_srv, (char *) p_buf->p_buffer))) {
+      MG_ERROR(p_buf->p_buffer + MG_RECV_HEAD);
+      mg_buf_free(p_buf);
+      return NULL;
+   }
+
+   if (!strncmp((char *) p_buf->p_buffer + 5, "co", 2)) { /* v2.4.48 */
+      int oref;
+
+      p_buf->p_buffer[p_buf->data_size] = '\0';
+      oref = (int) strtol(p_buf->p_buffer + MG_RECV_HEAD, NULL, 10);
+      PyObject *argList = Py_BuildValue("sii", "mclass", oref, vargs.phndle);
+
+      /* Call the class object. */
+      PyObject *obj = PyObject_CallObject((PyObject *) &MClassType, argList);
+
+      /* Release the argument list. */
+      Py_DECREF(argList);
+
+      return obj;
+   }
+
+   output = MG_MAKE_PYSTRINGN(p_buf->p_buffer + MG_RECV_HEAD, p_buf->data_size - MG_RECV_HEAD);
+   mg_buf_free(p_buf);
+   return output;
+}
+
+
+static PyObject * ex_mclass_close(MClassObject *self, PyObject *args)
+{
+    if (self->class_name == NULL) {
+        PyErr_SetString(PyExc_AttributeError, "class_name");
+        return NULL;
+    }
+    return PyUnicode_FromFormat("*** class_name=%S ***", self->class_name);
 }
 
 
@@ -3555,7 +3925,7 @@ static PyObject * ex_ma_local_sort(PyObject *self, PyObject *args)
 }
 
 
-
+/* v2.4.48 */
 static PyMethodDef mg_python_methods[] = {
 	{"m_ext_version", ex_m_ext_version, METH_VARARGS, "m_ext_version() doc string"},
 
@@ -3632,10 +4002,10 @@ static PyMethodDef mg_python_methods[] = {
 #if PY_MAJOR_VERSION >= 3
     static struct PyModuleDef moduledef = {
         PyModuleDef_HEAD_INIT,
-        "mg_python",           /* m_name */
-        "mg_python module",    /* m_doc */
+        "mg_python",          /* m_name */
+        "mg_python module",   /* m_doc */
         -1,                   /* m_size */
-        mg_python_methods,     /* m_methods */
+        mg_python_methods,    /* m_methods */
         NULL,                 /* m_reload */
         NULL,                 /* m_traverse */
         NULL,                 /* m_clear */
@@ -3643,18 +4013,32 @@ static PyMethodDef mg_python_methods[] = {
     };
 #endif
 
+
 static PyObject * moduleinit(void)
 {
     PyObject *m;
 
+   /* v2.4.48 */
+   if (PyType_Ready(&MClassType) < 0) {
+      return NULL;
+   }
+
 #if PY_MAJOR_VERSION >= 3
-    m = PyModule_Create(&moduledef);
+   m = PyModule_Create(&moduledef);
 #else
-    m = Py_InitModule("mg_python", mg_python_methods);
+   m = Py_InitModule("mg_python", mg_python_methods);
 /*
-    m = Py_InitModule3("mg_python", mg_python_methods, module___doc__);
+   m = Py_InitModule3("mg_python", mg_python_methods, module___doc__);
 */
 #endif
+
+   /* v2.4.48 */
+   Py_INCREF(&MClassType);
+   if (PyModule_AddObject(m, "MClass", (PyObject *) &MClassType) < 0) {
+      Py_DECREF(&MClassType);
+      Py_DECREF(m);
+      return NULL;
+  }
 
    dbx_init();
 
@@ -3840,24 +4224,23 @@ int mg_get_keys(PyObject *keys, MGSTR * ckeys, PyObject **keys_tmp, char *record
 }
 
 
-int mg_get_vargs(PyObject *args, MGVARGS *pvargs)
+int mg_get_vargs(PyObject *args, MGVARGS *pvargs, int context)
 {
    int n, max, len;
    char fmt[64];
 
-   len = 0;
-   fmt[len ++] = 'i';
-   fmt[len ++] = 's';
-   fmt[len ++] = '|';
-   for (n = 0; n < MG_MAX_VARGS; n ++) {
-      pvargs->pvars[n] = NULL;
-      pvargs->cvars[n].ps = NULL;
-      pvargs->cvars[n].size = 0;
-      fmt[len ++] = 'O';
-   }
-   fmt[len] = '\0';
+   if (context) {
+      len = 0;
+      fmt[len ++] = '|';
+      for (n = 0; n < MG_MAX_VARGS; n ++) {
+         pvargs->pvars[n] = NULL;
+         pvargs->cvars[n].ps = NULL;
+         pvargs->cvars[n].size = 0;
+         fmt[len ++] = 'O';
+      }
+      fmt[len] = '\0';
 
-   if (!PyArg_ParseTuple(args, fmt, &(pvargs->phndle), &(pvargs->global), &(pvargs->pvars[0]), &(pvargs->pvars[1]),
+      if (!PyArg_ParseTuple(args, fmt, &(pvargs->pvars[0]), &(pvargs->pvars[1]),
             &(pvargs->pvars[2]),  &(pvargs->pvars[3]),  &(pvargs->pvars[4]),  &(pvargs->pvars[5]),  &(pvargs->pvars[6]),
             &(pvargs->pvars[7]),  &(pvargs->pvars[8]),  &(pvargs->pvars[9]),  &(pvargs->pvars[10]), &(pvargs->pvars[11]),
             &(pvargs->pvars[12]), &(pvargs->pvars[13]), &(pvargs->pvars[14]), &(pvargs->pvars[15]), &(pvargs->pvars[16]),
@@ -3865,9 +4248,33 @@ int mg_get_vargs(PyObject *args, MGVARGS *pvargs)
             &(pvargs->pvars[22]), &(pvargs->pvars[23]), &(pvargs->pvars[24]), &(pvargs->pvars[25]), &(pvargs->pvars[26]),
             &(pvargs->pvars[27]), &(pvargs->pvars[28]), &(pvargs->pvars[29]), &(pvargs->pvars[30]), &(pvargs->pvars[31]))) {
 
-      return -1;
+         return -1;
+      }
    }
+   else {
+      len = 0;
+      fmt[len ++] = 'i';
+      fmt[len ++] = 's';
+      fmt[len ++] = '|';
+      for (n = 0; n < MG_MAX_VARGS; n ++) {
+         pvargs->pvars[n] = NULL;
+         pvargs->cvars[n].ps = NULL;
+         pvargs->cvars[n].size = 0;
+         fmt[len ++] = 'O';
+      }
+      fmt[len] = '\0';
 
+      if (!PyArg_ParseTuple(args, fmt, &(pvargs->phndle), &(pvargs->global), &(pvargs->pvars[0]), &(pvargs->pvars[1]),
+            &(pvargs->pvars[2]),  &(pvargs->pvars[3]),  &(pvargs->pvars[4]),  &(pvargs->pvars[5]),  &(pvargs->pvars[6]),
+            &(pvargs->pvars[7]),  &(pvargs->pvars[8]),  &(pvargs->pvars[9]),  &(pvargs->pvars[10]), &(pvargs->pvars[11]),
+            &(pvargs->pvars[12]), &(pvargs->pvars[13]), &(pvargs->pvars[14]), &(pvargs->pvars[15]), &(pvargs->pvars[16]),
+            &(pvargs->pvars[17]), &(pvargs->pvars[18]), &(pvargs->pvars[19]), &(pvargs->pvars[20]), &(pvargs->pvars[21]),
+            &(pvargs->pvars[22]), &(pvargs->pvars[23]), &(pvargs->pvars[24]), &(pvargs->pvars[25]), &(pvargs->pvars[26]),
+            &(pvargs->pvars[27]), &(pvargs->pvars[28]), &(pvargs->pvars[29]), &(pvargs->pvars[30]), &(pvargs->pvars[31]))) {
+
+         return -1;
+      }
+   }
    for (n = 0; n < MG_MAX_VARGS && pvargs->pvars[n]; n ++) {
       pvargs->cvars[n].ps = (unsigned char *) mg_get_string(pvargs->pvars[n], &(pvargs->py_nkey[n]), &len);
       pvargs->cvars[n].size = len;

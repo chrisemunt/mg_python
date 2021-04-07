@@ -1064,6 +1064,7 @@ typedef struct tagDBXTHRT {
 #define MG_TX_AKEY               1
 #define MG_TX_AREC               2
 #define MG_TX_EOD                3
+#define MG_TX_OREF               5
 #define MG_TX_AREC_FORMATTED     9
 
 #define MG_RECV_HEAD             8
