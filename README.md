@@ -3,9 +3,9 @@
 A Python Extension for InterSystems **Cache/IRIS** and **YottaDB**.
 
 Chris Munt <cmunt@mgateway.com>  
-14 March 2021, M/Gateway Developments Ltd [http://www.mgateway.com](http://www.mgateway.com)
+5 April 2021, M/Gateway Developments Ltd [http://www.mgateway.com](http://www.mgateway.com)
 
-* Current Release: Version: 2.3; Revision 47.
+* Current Release: Version: 2.4; Revision 48.
 * Two connectivity models to the InterSystems or YottaDB database are provided: High performance via the local database API or network based.
 * [Release Notes](#RelNotes) can be found at the end of this document.
 
@@ -101,7 +101,7 @@ Change to your development Namespace and check the installation:
        do ^%zmgsi
 
        M/Gateway Developments Ltd - Service Integration Gateway
-       Version: 4.0; Revision 16 (11 February 2021)
+       Version: 4.2; Revision 19 (5 April 2021)
 
 
 #### Installation for YottaDB
@@ -130,7 +130,7 @@ Link all the **zmgsi** routines and check the installation:
        do ^%zmgsi
 
        M/Gateway Developments Ltd - Service Integration Gateway
-       Version: 4.0; Revision 16 (11 February 2021)
+       Version: 4.2; Revision 19 (5 April 2021)
 
 Note that the version of **zmgsi** is successfully displayed.
 
@@ -451,7 +451,54 @@ Example:
       
 Example (Encode a date to internal storage format):
 
-       result = mg_python.m_classmethod("%Library.Date", "DisplayToLogical", "10/10/2019")
+       result = mg_python.m_classmethod(0, "%Library.Date", "DisplayToLogical", "10/10/2019")
+
+
+### Creating and manipulating instances of objects
+
+The following simple class will be used to illustrate this facility.
+
+       Class User.Person Extends %Persistent
+       {
+          Property Number As %Integer;
+          Property Name As %String;
+          Property DateOfBirth As %Date;
+          Method Age(AtDate As %Integer) As %Integer
+          {
+             Quit (AtDate - ..DateOfBirth) \ 365.25
+          }
+       }
+
+### Create an entry for a new Person
+
+       person =  mg_python.m_classmethod(0, "User.Person", "%New");
+
+Add Data:
+
+       result = person.setproperty("Number", 1);
+       result = person.setproperty("Name", "John Smith");
+       result = person.setproperty("DateOfBirth", "12/8/1995");
+
+Save the object record:
+
+       result = person.method("%Save");
+
+### Retrieve an entry for an existing Person
+
+Retrieve data for object %Id of 1.
+ 
+       person =  mg_python.m_classmethod(0, "User.Person", "%OpenId", 1);
+
+Return properties:
+
+       var number = person.getproperty("Number");
+       var name = person.getproperty("Name");
+       var dob = person.getproperty("DateOfBirth");
+
+Calculate person's age at a particular date:
+
+       today =  mg_python.m_classmethod(0, "%Library.Date", "DisplayToLogical", "10/10/2019");
+       var age = person.method("Age", today);
 
 
 ## <a name="License"></a> License
@@ -497,3 +544,9 @@ Unless required by applicable law or agreed to in writing, software distributed 
 
 * Introduce support for YottaDB Transaction Processing over API based connectivity.
 	* This functionality was previously only available over network-based connectivity to YottaDB.
+
+### v2.4.48 (5 April 2021)
+
+* Introduce improved support for InterSystems Objects for the standard (PHP/Python/Ruby) connectivity protocol.
+	* This enhancement requires DB Superserver version 4.2; Revision 19 (or later).
+
