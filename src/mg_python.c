@@ -56,6 +56,10 @@ Version 2.3.47 14 March 2021:
 Version 2.4.48 5 April 2021:
    Introduce improved support for InterSystems Objects for the standard (PHP/Python/Ruby) connectivity protocol.
 
+Version 2.4.49 26 October 2021:
+   Ensure that data strings returned from YottaDB are correctly terminated.
+   Verify that mg_python will build and work with Python v3.9.x and v3.10.0.
+
 */
 
 /*
@@ -108,7 +112,7 @@ Version 2.4.48 5 April 2021:
 */
 
 
-#define MG_VERSION               "2.4.48"
+#define MG_VERSION               "2.4.49"
 
 #define MG_MAX_KEY               256
 #define MG_MAX_PAGE              256

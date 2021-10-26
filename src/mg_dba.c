@@ -65,6 +65,9 @@ Version 1.2.9 14 March 2021:
 Version 1.3.10 5 April 2021:
    Introduce improved support for InterSystems Objects for the standard (PHP/Python/Ruby) connectivity protocol.
 
+Version 1.3.11 26 October 2021:
+   Ensure that data strings returned from YottaDB are correctly terminated.
+
 */
 
 
@@ -7802,6 +7805,13 @@ int mg_invoke_server_api(MGSRV *p_srv, int chndle, MGBUF *p_buf, int size, int m
       }
       else {
          rc = ydb_function_ex(pmeth, pfun);
+         /* v1.3.11 */
+         if (rc == YDB_OK) {
+            p_buf->data_size = (unsigned long) pfun->out.length;
+         }
+         else {
+            p_buf->data_size = 0;
+         }
       }
       result = 1;
    }
