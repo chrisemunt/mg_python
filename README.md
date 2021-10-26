@@ -3,9 +3,9 @@
 A Python Extension for InterSystems **Cache/IRIS** and **YottaDB**.
 
 Chris Munt <cmunt@mgateway.com>  
-5 April 2021, M/Gateway Developments Ltd [http://www.mgateway.com](http://www.mgateway.com)
+26 October 2021, M/Gateway Developments Ltd [http://www.mgateway.com](http://www.mgateway.com)
 
-* Current Release: Version: 2.4; Revision 48.
+* Current Release: Version: 2.4; Revision 49.
 * Two connectivity models to the InterSystems or YottaDB database are provided: High performance via the local database API or network based.
 * [Release Notes](#RelNotes) can be found at the end of this document.
 
@@ -550,3 +550,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 * Introduce improved support for InterSystems Objects for the standard (PHP/Python/Ruby) connectivity protocol.
 	* This enhancement requires DB Superserver version 4.2; Revision 19 (or later).
 
+### v2.4.49 (26 October 2021)
+
+* Ensure that data strings returned from YottaDB are correctly terminated.
+* Verify that **mg\_python** will build and work with Python v3.9.x and v3.10.0.
