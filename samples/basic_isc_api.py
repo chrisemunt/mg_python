@@ -26,7 +26,7 @@ mg_python.m_bind_server_api(db, dbtype, path, username, password, envvars, param
 print("\nmg_python version: ", mg_python.m_ext_version())
 
 print('\nSet up some records in ^MyGlobal ...')
-for key in range(db, 10):
+for key in range(0, 10):
    mg_python.m_set(db, "^MyGlobal", key, "Record #" + str(key))
 
 print('\nParse records in order ($Order) ...')
