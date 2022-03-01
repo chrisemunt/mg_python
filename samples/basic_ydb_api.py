@@ -9,12 +9,24 @@
 
 import mg_python
 
+print("\nAccess to YottaDB via the API")
+
+# Modify the following parameters for your installation
+dbtype = "YottaDB"
+path = "/usr/local/lib/yottadb/r130"
+username = ""
+password = ""
+envvars = "";
+envvars = envvars + "ydb_dir=/root/.yottadb\n"
+envvars = envvars + "ydb_rel=r1.30_x86_64\n"
+envvars = envvars + "ydb_gbldir=/root/.yottadb/r1.30_x86_64/g/yottadb.gld\n"
+envvars = envvars + "ydb_routines=/root/.yottadb/r1.30_x86_64/o*(/root/.yottadb/r1.30_x86_64/r /root/.yottadb/r) /usr/local/lib/yottadb/r130/libyottadbutil.so\n"
+envvars = envvars + "ydb_ci=/usr/local/lib/yottadb/r130/cm.ci\n"
+envvars = envvars + "\n"
+params = ""
 db = 0
 
-print("\nAccess to M database via the Network")
-
-mg_python.m_set_host(db, "localhost", 7041, "", "")
-mg_python.m_set_uci(db, "USER")
+mg_python.m_bind_server_api(db, dbtype, path, username, password, envvars, params)
 
 print("\nmg_python version: ", mg_python.m_ext_version())
 
@@ -41,3 +53,5 @@ while (key1 != ""):
 # print('\nInvoke M function: $$add^math(2,3): ' + mg_python.m_function(db, "add^math", 2, 3))
 
 print('\nError messages:', mg_python.m_get_last_error(0))
+
+mg_python.m_release_server_api(db)

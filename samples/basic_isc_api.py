@@ -9,12 +9,19 @@
 
 import mg_python
 
+print("\nAccess to InterSystems database via the API")
+
+# Modify the following parameters for your installation
+dbtype = "Cache"
+path = "/cache20181/mgr"
+username = "_SYSTEM"
+password = "SYS"
+envvars = ""
+params = ""
 db = 0
 
-print("\nAccess to M database via the Network")
-
-mg_python.m_set_host(db, "localhost", 7041, "", "")
 mg_python.m_set_uci(db, "USER")
+mg_python.m_bind_server_api(db, dbtype, path, username, password, envvars, params)
 
 print("\nmg_python version: ", mg_python.m_ext_version())
 
@@ -40,4 +47,8 @@ while (key1 != ""):
 
 # print('\nInvoke M function: $$add^math(2,3): ' + mg_python.m_function(db, "add^math", 2, 3))
 
+print('\nInvoke an InterSystems class method: %Library.Date.DisplayToLogical(10/10/2019): ' + mg_python.m_classmethod(db, "%Library.Date", "DisplayToLogical", "10/10/2019"))
+
 print('\nError messages:', mg_python.m_get_last_error(0))
+
+mg_python.m_release_server_api(db)
