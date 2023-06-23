@@ -3,7 +3,7 @@
    | mg_python: Python Extension for M/Cache/IRIS                             |
    | Author: Chris Munt cmunt@mgateway.com                                    |
    |                    chris.e.munt@gmail.com                                |
-   | Copyright (c) 2016-2021 M/Gateway Developments Ltd,                      |
+   | Copyright (c) 2019-2023 MGateway Ltd                                     |
    | Surrey UK.                                                               |
    | All rights reserved.                                                     |
    |                                                                          |
@@ -59,6 +59,9 @@ Version 2.4.48 5 April 2021:
 Version 2.4.49 26 October 2021:
    Ensure that data strings returned from YottaDB are correctly terminated.
    Verify that mg_python will build and work with Python v3.9.x and v3.10.0.
+
+Version 2.4.49a 23 June 2023:
+   Documentation update.
 
 */
 
@@ -310,7 +313,7 @@ static PyObject * ex_m_ext_version(PyObject *self, PyObject *args)
 {
    char buffer[256];
 
-   sprintf(buffer, "M/Gateway Developments Ltd. - mg_python: Python Gateway to M - Version %s", MG_VERSION);
+   sprintf(buffer, "MGateway Ltd. - mg_python: Python Gateway to M - Version %s", MG_VERSION);
 
    return Py_BuildValue("s", buffer);
 }
