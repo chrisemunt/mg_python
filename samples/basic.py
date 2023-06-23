@@ -1,7 +1,7 @@
 #
 #   mg_python Test Page
 #
-#      Copyright (c) 2008-2022 M/Gateway Developments Ltd.
+#      Copyright (c) 2008-2023 MGateway Ltd.
 #      All rights reserved.
 #
 #   This test page writes to global ^MyGlobal
